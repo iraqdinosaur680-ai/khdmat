@@ -1,4 +1,4 @@
-package com.myapp.app;
+package com.khdmat.app;
 
 import com.getcapacitor.BridgeActivity;
 
