@@ -39,10 +39,8 @@ jobs:
       - name: Build APK
         run: |
           cd android
-          # Use the system-installed gradle to regenerate the wrapper if needed
-          gradle wrapper --gradle-version 8.2.2
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          # Use the system-installed gradle directly to avoid wrapper issues
+          gradle assembleDebug --no-daemon
           
       - name: Upload APK
         uses: actions/upload-artifact@v4
