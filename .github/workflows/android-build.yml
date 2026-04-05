@@ -34,12 +34,12 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          wrapper-validation-enabled: false
+          gradle-version: 8.7
 
       - name: Build APK
         run: |
           cd android
-          # Use the system-installed gradle directly to avoid wrapper issues
+          # Use the gradle version provided by setup-gradle
           gradle assembleDebug --no-daemon
           
       - name: Upload APK
