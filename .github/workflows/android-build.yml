@@ -25,10 +25,10 @@ jobs:
         run: |
           npx cap sync android
           
-      - name: Set up JDK 21
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '17'
           distribution: 'temurin'
           
       - name: Setup Gradle
@@ -36,17 +36,13 @@ jobs:
         with:
           wrapper-validation-enabled: false
 
-      - name: Regenerate Gradle Wrapper
-        run: |
-          cd android
-          # Regenerate the wrapper since the previous one was corrupt/deleted
-          gradle wrapper --gradle-version 8.10.2
-          chmod +x gradlew
-
       - name: Build APK
         run: |
           cd android
-          ./gradlew assembleDebug
+          # Use the system-installed gradle to regenerate the wrapper if needed
+          gradle wrapper --gradle-version 8.2.2
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
           
       - name: Upload APK
         uses: actions/upload-artifact@v4
