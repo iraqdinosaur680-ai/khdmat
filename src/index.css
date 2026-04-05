@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #22c55e; /* green-500 */
+  --color-secondary: #ffffff;
+  --color-dark-primary: #3b82f6; /* blue-500 */
+  --color-dark-secondary: #000000;
+}
+
+@layer base {
+  body {
+    @apply transition-colors duration-300 bg-white text-gray-900 dark:bg-black dark:text-gray-100;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-gray-900 dark:text-white;
+  }
+}
+
+.light-mode {
+  --theme-primary: var(--color-primary);
+}
+
+.dark-mode {
+  --theme-primary: var(--color-dark-primary);
+}
+
+.green-theme {
+  --theme-primary: var(--color-primary);
+}
+
+.blue-theme {
+  --theme-primary: var(--color-dark-primary);
+}
+

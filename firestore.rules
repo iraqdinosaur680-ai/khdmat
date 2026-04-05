@@ -1,0 +1,275 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: uid
+// Fields:
+//   - uid: string (required)
+//   - name: string (required)
+//   - email: string (required, format: email)
+//   - phone: string (required)
+//   - photoURL: string (optional)
+//   - city: string (required, enum: [Baghdad, Basra, ...])
+//   - role: string (required, enum: [user, worker, admin])
+//   - workerId: string (optional, for workers)
+//   - createdAt: number (required)
+//
+// Collection: workers
+// Document ID: uid
+// Fields:
+//   - uid: string (required)
+//   - email: string (required)
+//   - profession: string (required)
+//   - workingHours: string (required)
+//   - hasTransport: boolean (required)
+//   - rating: number (required)
+//   - phone: string (required)
+//   - location: map (required, {lat: number, lng: number})
+//
+// Collection: bookings
+// Document ID: bookingId
+// Fields:
+//   - id: string (required)
+//   - customerId: string (required)
+//   - workerId: string (required)
+//   - status: string (required, enum: [pending, confirmed, completed, cancelled])
+//   - timestamp: number (required)
+//   - category: string (required)
+//   - city: string (required)
+//   - description: string (required)
+//   - location: string (required)
+//
+// Collection: messages
+// Document ID: messageId
+// Fields:
+//   - id: string (required)
+//   - bookingId: string (required)
+//   - senderId: string (required)
+//   - text: string (required)
+//   - timestamp: number (required)
+//
+// Collection: workerApplications
+// Document ID: uid
+// Fields:
+//   - uid: string (required)
+//   - phone: string (required)
+//   - email: string (required, format: email)
+//   - nationalId: string (required)
+//   - status: string (required, enum: [pending, approved, rejected])
+//   - timestamp: number (required)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+         ((request.auth.token.email == "mushtaqq.rh@gmail.com" || request.auth.token.email == "tahatariq20069@gmail.com" || request.auth.token.email == "iraqdinosaur680@gmail.com") && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isWorker() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'worker';
+    }
+
+    function getWorkerId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workerId;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'name', 'email', 'city', 'role', 'createdAt']) &&
+             data.uid is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             isValidEmail(data.email) &&
+             data.city is string &&
+             data.role in ['user', 'worker', 'admin'] &&
+             data.createdAt is number &&
+             (!('phone' in data) || data.phone is string) &&
+             (!('workerId' in data) || data.workerId is string) &&
+             (!('fcmToken' in data) || (data.fcmToken is string && data.fcmToken.size() < 500)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() < 200000));
+    }
+
+    function isValidWorker(data) {
+      return data.keys().hasAll(['uid', 'email', 'profession', 'workingHours', 'hasTransport', 'rating', 'phone', 'location']) &&
+             data.uid is string &&
+             isValidEmail(data.email) &&
+             data.profession is string && data.profession.size() > 0 &&
+             data.workingHours is string &&
+             data.hasTransport is bool &&
+             data.rating is number &&
+             data.phone is string &&
+             data.location is map &&
+             data.location.lat is number && data.location.lng is number &&
+             (!('specialties' in data) || (data.specialties is list && data.specialties.size() <= 10)) &&
+             (!('service_area' in data) || (data.service_area is list && data.service_area.size() <= 20)) &&
+             (!('isAvailable' in data) || data.isAvailable is bool) &&
+             (!('description' in data) || (data.description is string && data.description.size() < 2000)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() < 200000));
+    }
+
+    function isValidBooking(data) {
+      return data.keys().hasAll(['id', 'customerId', 'customerName', 'workerId', 'workerName', 'status', 'timestamp', 'category', 'city', 'description', 'location']) &&
+             data.status in ['pending', 'confirmed', 'completed', 'cancelled', 'denied'] &&
+             data.timestamp is number &&
+             data.customerName is string && data.customerName.size() > 0 &&
+             data.workerName is string && data.workerName.size() > 0 &&
+             data.city is string &&
+             data.description is string && data.description.size() > 0 && data.description.size() < 1000 &&
+             data.location is string && data.location.size() > 0 && data.location.size() < 500 &&
+             (!('lastMessage' in data) || (data.lastMessage is string && data.lastMessage.size() < 1000)) &&
+             (!('lastMessageSenderId' in data) || data.lastMessageSenderId is string) &&
+             (!('lastMessageTimestamp' in data) || data.lastMessageTimestamp is number) &&
+             (!('scheduledTime' in data) || data.scheduledTime is string) &&
+             (!('lat' in data) || data.lat is number) &&
+             (!('lng' in data) || data.lng is number) &&
+             (!('rating' in data) || (data.rating is number && data.rating >= 1 && data.rating <= 5)) &&
+             (!('review' in data) || (data.review is string && data.review.size() < 1000));
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['id', 'bookingId', 'senderId', 'text', 'timestamp']) &&
+             data.senderId == request.auth.uid &&
+             data.text is string && data.text.size() > 0 && data.text.size() < 1000 &&
+             data.timestamp is number &&
+             (!('read' in data) || data.read is bool);
+    }
+
+    function isValidApplication(data) {
+      return data.keys().hasAll(['uid', 'phone', 'email', 'nationalId', 'status', 'timestamp']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             data.status == 'pending' &&
+             data.timestamp is number;
+    }
+
+    function isValidReview(data) {
+      return data.keys().hasAll(['id', 'bookingId', 'workerId', 'customerId', 'customerName', 'rating', 'comment', 'timestamp']) &&
+             data.id is string &&
+             data.bookingId is string &&
+             data.workerId is string &&
+             data.customerId == request.auth.uid &&
+             data.customerName is string &&
+             data.rating is number && data.rating >= 1 && data.rating <= 5 &&
+             data.comment is string && data.comment.size() < 1000 &&
+             data.timestamp is number &&
+             (!('customerPhoto' in data) || data.customerPhoto is string);
+    }
+
+    function isValidReport(data) {
+      return data.keys().hasAll(['id', 'bookingId', 'reporterId', 'reportedId', 'reason', 'details', 'timestamp', 'status', 'language']) &&
+             data.id is string &&
+             data.bookingId is string &&
+             data.reporterId == request.auth.uid &&
+             data.reportedId is string &&
+             data.reason is string &&
+             data.details is string &&
+             data.timestamp is number &&
+             data.status == 'pending' &&
+             data.language in ['en', 'ar'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{uid} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    (isAdmin() || (isOwner(uid) && request.resource.data.uid == request.auth.uid && request.resource.data.role == 'user'));
+      allow update: if isAuthenticated() && (isOwner(uid) || isAdmin()) && isValidUser(request.resource.data) && 
+                    (isAdmin() || (request.resource.data.uid == resource.data.uid && request.resource.data.role == resource.data.role));
+      allow delete: if isAdmin();
+    }
+
+    match /workers/{uid} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (isOwner(uid) && isValidWorker(request.resource.data)) || 
+                    (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating']) && request.resource.data.rating is number) ||
+                    (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isAvailable']) && request.resource.data.isAvailable is bool) ||
+                    (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['description']) && request.resource.data.description is string);
+      allow delete: if isAdmin();
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.customerId || 
+        (isWorker() && getWorkerId() == resource.data.workerId) || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && isValidBooking(request.resource.data) && request.resource.data.customerId == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        request.auth.uid == resource.data.customerId || 
+        (isWorker() && getWorkerId() == resource.data.workerId) || 
+        isAdmin()
+      ) && isValidBooking(request.resource.data);
+      allow delete: if isAuthenticated() && (
+        request.auth.uid == resource.data.customerId || 
+        (isWorker() && getWorkerId() == resource.data.workerId) || 
+        isAdmin()
+      );
+    }
+
+    match /messages/{messageId} {
+       allow read: if isAuthenticated() && (isAdmin() || 
+         request.auth.uid == get(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.customerId ||
+         (isWorker() && getWorkerId() == get(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.workerId));
+       allow create: if isAuthenticated() && isValidMessage(request.resource.data) && (
+         request.auth.uid == get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.customerId ||
+         (isWorker() && getWorkerId() == get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.workerId) ||
+         isAdmin()
+       );
+       allow update: if isAuthenticated() && (
+         request.auth.uid == get(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.customerId ||
+         (isWorker() && getWorkerId() == get(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.workerId)
+       ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) && request.resource.data.read == true;
+    }
+
+    match /workerApplications/{uid} {
+      allow read: if isAdmin() || isOwner(uid);
+      allow create: if isAuthenticated() && isValidApplication(request.resource.data);
+      allow update: if isAdmin();
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidReview(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.reporterId == request.auth.uid);
+      allow create: if isAuthenticated() && isValidReport(request.resource.data) && 
+                      reportId == request.auth.uid + "_" + request.resource.data.bookingId &&
+                      !exists(/databases/$(database)/documents/reports/$(reportId));
+      allow update: if isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      allow delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}

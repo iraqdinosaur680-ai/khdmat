@@ -1,0 +1,127 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Stores user profile information.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "city": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "worker", "admin"] },
+        "createdAt": { "type": "number" },
+        "fcmToken": { "type": "string" }
+      },
+      "required": ["uid", "name", "email", "phone", "city", "role", "createdAt"]
+    },
+    "WorkerProfile": {
+      "title": "Worker Profile",
+      "description": "Stores worker-specific information.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "profession": { "type": "string" },
+        "workingHours": { "type": "string" },
+        "hasTransport": { "type": "boolean" },
+        "rating": { "type": "number" },
+        "phone": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        }
+      },
+      "required": ["uid", "profession", "workingHours", "hasTransport", "rating", "phone", "location"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Stores booking information.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerId": { "type": "string" },
+        "workerId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "completed", "cancelled"] },
+        "timestamp": { "type": "number" },
+        "category": { "type": "string" },
+        "city": { "type": "string" },
+        "description": { "type": "string" },
+        "location": { "type": "string" },
+        "scheduledTime": { "type": "string" },
+        "lastMessage": { "type": "string" },
+        "lastMessageSenderId": { "type": "string" },
+        "lastMessageTimestamp": { "type": "number" }
+      },
+      "required": ["id", "customerId", "workerId", "status", "timestamp", "category", "city", "description", "location"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Stores chat messages.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "bookingId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["id", "bookingId", "senderId", "text", "timestamp"]
+    },
+    "WorkerApplication": {
+      "title": "Worker Application",
+      "description": "Stores applications to become a worker.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "nationalId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["uid", "phone", "email", "nationalId", "status", "timestamp"]
+    },
+    "AppSettings": {
+      "title": "App Settings",
+      "description": "Stores global application settings.",
+      "type": "object",
+      "properties": {
+        "supportEmail": { "type": "string", "format": "email" },
+        "supportPhone": { "type": "string" },
+        "whatsappNumber": { "type": "string" }
+      },
+      "required": ["supportEmail", "supportPhone", "whatsappNumber"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "UserProfile",
+      "description": "User profile data."
+    },
+    "/workers/{uid}": {
+      "schema": "WorkerProfile",
+      "description": "Worker profile data."
+    },
+    "/bookings/{bookingId}": {
+      "schema": "Booking",
+      "description": "Booking data."
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Chat message data."
+    },
+    "/workerApplications/{uid}": {
+      "schema": "WorkerApplication",
+      "description": "Worker application data."
+    },
+    "/settings/{settingId}": {
+      "schema": "AppSettings",
+      "description": "Global app settings."
+    }
+  }
+}
