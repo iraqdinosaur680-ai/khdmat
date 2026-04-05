@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Khidmat App</string>
-    <string name="title_activity_main">Khidmat App</string>
-    <string name="package_name">com.myapp.app</string>
-    <string name="custom_url_scheme">com.myapp.app</string>
+    <string name="app_name">Khdmat</string>
+    <string name="title_activity_main">Khdmat</string>
+    <string name="package_name">com.khdmat.app</string>
+    <string name="custom_url_scheme">com.khdmat.app</string>
 </resources>

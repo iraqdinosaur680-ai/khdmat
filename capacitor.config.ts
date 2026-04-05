@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.myapp.app',
-  appName: 'Khidmat App',
+  appId: 'com.khdmat.app',
+  appName: 'Khdmat',
   webDir: 'dist'
 };
 
