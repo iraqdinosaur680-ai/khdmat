@@ -34,19 +34,11 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Fix Gradle Wrapper
-        run: |
-          cd android
-          rm -f gradle/wrapper/gradle-wrapper.jar
-          # Install gradle if not present (though usually present on ubuntu-latest)
-          # or just use the one from setup-gradle if it provides it to the path
-          gradle wrapper --gradle-version 8.2
-          chmod +x gradlew
-
       - name: Build APK
         run: |
           cd android
-          ./gradlew assembleDebug
+          # Use the system-installed gradle instead of the corrupt wrapper
+          gradle assembleDebug
           
       - name: Upload APK
         uses: actions/upload-artifact@v4
