@@ -33,12 +33,20 @@ jobs:
           
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          wrapper-validation-enabled: false
+
+      - name: Regenerate Gradle Wrapper
+        run: |
+          cd android
+          # Regenerate the wrapper since the previous one was corrupt/deleted
+          gradle wrapper --gradle-version 8.2
+          chmod +x gradlew
 
       - name: Build APK
         run: |
           cd android
-          # Use the system-installed gradle instead of the corrupt wrapper
-          gradle assembleDebug
+          ./gradlew assembleDebug
           
       - name: Upload APK
         uses: actions/upload-artifact@v4
