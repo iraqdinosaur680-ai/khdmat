@@ -9,12 +9,12 @@ const config: CapacitorConfig = {
       skipNativeAuth: false,
       providers: ["google.com"],
       google: {
-        webClientId: "420174503383-vlahtpo7ceqibf8aps9ietlece7nq48e.apps.googleusercontent.com",
+        webClientId: "420174503383-ng18hjfhv6d0clq7c86g0v0s9iq7isad.apps.googleusercontent.com",
       },
     },
     GoogleAuth: {
       scopes: ["profile", "email"],
-      serverClientId: "420174503383-vlahtpo7ceqibf8aps9ietlece7nq48e.apps.googleusercontent.com",
+      serverClientId: "420174503383-ng18hjfhv6d0clq7c86g0v0s9iq7isad.apps.googleusercontent.com",
       forceCodeForRefreshToken: true,
     },
   },

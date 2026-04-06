@@ -279,7 +279,7 @@ const AuthPage = () => {
       if (Capacitor.isNativePlatform()) {
         console.log("Starting native Google login...");
         const result = await FirebaseAuthentication.signInWithGoogle({
-          webClientId: '420174503383-vlahtpo7ceqibf8aps9ietlece7nq48e.apps.googleusercontent.com'
+          webClientId: '420174503383-ng18hjfhv6d0clq7c86g0v0s9iq7isad.apps.googleusercontent.com'
         });
         console.log("Native Google login result:", result);
         
