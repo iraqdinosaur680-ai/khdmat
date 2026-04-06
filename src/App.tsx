@@ -272,11 +272,22 @@ const AuthPage = () => {
   const [loading, setLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
+    setError('');
+    setLoading(true);
     try {
       let user;
       if (Capacitor.isNativePlatform()) {
-        const result = await FirebaseAuthentication.signInWithGoogle();
-        const credential = GoogleAuthProvider.credential(result.credential?.idToken);
+        console.log("Starting native Google login...");
+        const result = await FirebaseAuthentication.signInWithGoogle({
+          webClientId: '420174503383-vlahtpo7ceqibf8aps9ietlece7nq48e.apps.googleusercontent.com'
+        });
+        console.log("Native Google login result:", result);
+        
+        if (!result.credential?.idToken) {
+          throw new Error("No ID token received from Google Sign-In.");
+        }
+        
+        const credential = GoogleAuthProvider.credential(result.credential.idToken);
         const userCredential = await signInWithCredential(auth, credential);
         user = userCredential.user;
       } else {
@@ -328,6 +339,8 @@ const AuthPage = () => {
       } else {
         setError(err.message);
       }
+    } finally {
+      setLoading(false);
     }
   };
 
