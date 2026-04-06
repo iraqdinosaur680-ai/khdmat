@@ -43,6 +43,11 @@ jobs:
           # Use the gradle version provided by setup-gradle
           gradle assembleDebug --no-daemon
           
+      - name: Get SHA-1 Fingerprint
+        run: |
+          cd android
+          gradle signingReport --no-daemon
+          
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
