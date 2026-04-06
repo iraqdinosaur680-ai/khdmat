@@ -331,13 +331,14 @@ const AuthPage = () => {
         }
       }
     } catch (err: any) {
+      console.error("Google Login Error:", err);
       if (err.code === 'permission-denied' || err.message.includes('insufficient permissions')) {
         handleFirestoreError(err, OperationType.WRITE, 'users');
       }
       if (err.code === 'auth/operation-not-allowed') {
         setError("This login method is not enabled in the Firebase Console. Please enable it under Authentication > Sign-in method.");
       } else {
-        setError(err.message);
+        setError(`${err.message} ${err.code ? `(${err.code})` : ''}`);
       }
     } finally {
       setLoading(false);

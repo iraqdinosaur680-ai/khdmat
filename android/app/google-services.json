@@ -14,7 +14,15 @@
       },
       "oauth_client": [
         {
-          "client_id": "420174503383-vlahtpo7ceqibf8aps9ietlece7nq48e.apps.googleusercontent.com",
+          "client_id": "420174503383-j1mv9qdv8rp4sjl394gov2ml2d7i3gpf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.khdmat.app",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d5474e73a5458f5467efb"
+          }
+        },
+        {
+          "client_id": "420174503383-ng18hjfhv6d0clq7c86g0v0s9iq7isad.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
@@ -27,7 +35,7 @@
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "420174503383-vlahtpo7ceqibf8aps9ietlece7nq48e.apps.googleusercontent.com",
+              "client_id": "420174503383-ng18hjfhv6d0clq7c86g0v0s9iq7isad.apps.googleusercontent.com",
               "client_type": 3
             }
           ]
