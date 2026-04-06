@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "420174503383",
+    "project_id": "gen-lang-client-0591138893",
+    "storage_bucket": "gen-lang-client-0591138893.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:420174503383:android:b415ab7998247a28dfbf92",
+        "android_client_info": {
+          "package_name": "com.khdmat.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "420174503383-vlahtpo7ceqibf8aps9ietlece7nq48e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCG17F_fwtydy6siuw2jZvdtba5oZXU3v4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "420174503383-vlahtpo7ceqibf8aps9ietlece7nq48e.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
