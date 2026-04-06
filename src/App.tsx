@@ -21,8 +21,12 @@ import {
   sendEmailVerification,
   RecaptchaVerifier,
   linkWithPhoneNumber,
-  PhoneAuthProvider
+  PhoneAuthProvider,
+  GoogleAuthProvider,
+  signInWithCredential
 } from 'firebase/auth';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
+import { Capacitor } from '@capacitor/core';
 import { doc, setDoc, getDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp, getDocFromServer, deleteDoc, limit, updateDoc, writeBatch, getDocs, orderBy } from 'firebase/firestore';
 import { City, IRAQI_CITIES, UserProfile, WorkerProfile, Booking, Message, WorkerApplication, Review, Report } from './types';
 import { cn } from './lib/utils';
@@ -269,8 +273,17 @@ const AuthPage = () => {
 
   const handleGoogleLogin = async () => {
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
+      let user;
+      if (Capacitor.isNativePlatform()) {
+        const result = await FirebaseAuthentication.signInWithGoogle();
+        const credential = GoogleAuthProvider.credential(result.credential?.idToken);
+        const userCredential = await signInWithCredential(auth, credential);
+        user = userCredential.user;
+      } else {
+        const result = await signInWithPopup(auth, googleProvider);
+        user = result.user;
+      }
+
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       const isAdmin = user.email === 'tahatariq20069@gmail.com';
       
