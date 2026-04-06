@@ -8,6 +8,14 @@ const config: CapacitorConfig = {
     FirebaseAuthentication: {
       skipNativeAuth: false,
       providers: ["google.com"],
+      google: {
+        webClientId: "420174503383-vlahtpo7ceqibf8aps9ietlece7nq48e.apps.googleusercontent.com",
+      },
+    },
+    GoogleAuth: {
+      scopes: ["profile", "email"],
+      serverClientId: "420174503383-vlahtpo7ceqibf8aps9ietlece7nq48e.apps.googleusercontent.com",
+      forceCodeForRefreshToken: true,
     },
   },
 };
