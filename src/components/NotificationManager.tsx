@@ -21,6 +21,13 @@ export const NotificationManager = () => {
         }
       });
 
+      // Flags to ignore initial snapshots
+      let isInitialBookings = true;
+      let isInitialConfirmations = true;
+      let isInitialMessagesCustomer = true;
+      let isInitialMessagesWorker = true;
+      let isInitialApps = true;
+
       // 1. Listen for new booking requests (for workers)
       let unsubBookings: () => void;
       if (profile.role === 'worker' && (profile as any).workerId) {
@@ -30,6 +37,10 @@ export const NotificationManager = () => {
           where('status', '==', 'pending')
         );
         unsubBookings = onSnapshot(q, (snapshot) => {
+          if (isInitialBookings) {
+            isInitialBookings = false;
+            return;
+          }
           snapshot.docChanges().forEach((change) => {
             if (change.type === 'added') {
               const booking = change.doc.data() as Booking;
@@ -39,6 +50,8 @@ export const NotificationManager = () => {
               );
             }
           });
+        }, (error) => {
+          console.error("NotificationManager: unsubBookings error", error);
         });
       }
 
@@ -49,6 +62,10 @@ export const NotificationManager = () => {
         where('status', '==', 'confirmed')
       );
       const unsubConfirmations = onSnapshot(qConfirmations, (snapshot) => {
+        if (isInitialConfirmations) {
+          isInitialConfirmations = false;
+          return;
+        }
         snapshot.docChanges().forEach((change) => {
           if (change.type === 'added' || change.type === 'modified') {
             const booking = change.doc.data() as Booking;
@@ -71,16 +88,21 @@ export const NotificationManager = () => {
             }
           }
         });
+      }, (error) => {
+        console.error("NotificationManager: unsubConfirmations error", error);
       });
 
       // 4. Listen for new messages
-      // We listen to bookings where the user is a participant to get lastMessage updates
       const qMessagesCustomer = query(
         collection(db, 'bookings'),
         where('customerId', '==', user.uid),
         where('status', 'in', ['pending', 'confirmed'])
       );
       const unsubMessagesCustomer = onSnapshot(qMessagesCustomer, (snapshot) => {
+        if (isInitialMessagesCustomer) {
+          isInitialMessagesCustomer = false;
+          return;
+        }
         snapshot.docChanges().forEach((change) => {
           if (change.type === 'modified') {
             const booking = change.doc.data() as Booking;
@@ -92,6 +114,8 @@ export const NotificationManager = () => {
             }
           }
         });
+      }, (error) => {
+        console.error("NotificationManager: unsubMessagesCustomer error", error);
       });
 
       let unsubMessagesWorker: (() => void) | undefined;
@@ -102,6 +126,10 @@ export const NotificationManager = () => {
           where('status', 'in', ['pending', 'confirmed'])
         );
         unsubMessagesWorker = onSnapshot(qMessagesWorker, (snapshot) => {
+          if (isInitialMessagesWorker) {
+            isInitialMessagesWorker = false;
+            return;
+          }
           snapshot.docChanges().forEach((change) => {
             if (change.type === 'modified') {
               const booking = change.doc.data() as Booking;
@@ -113,6 +141,8 @@ export const NotificationManager = () => {
               }
             }
           });
+        }, (error) => {
+          console.error("NotificationManager: unsubMessagesWorker error", error);
         });
       }
 
@@ -122,6 +152,10 @@ export const NotificationManager = () => {
         where('uid', '==', user.uid)
       );
       const unsubApps = onSnapshot(qApps, (snapshot) => {
+        if (isInitialApps) {
+          isInitialApps = false;
+          return;
+        }
         snapshot.docChanges().forEach((change) => {
           if (change.type === 'modified') {
             const app = change.doc.data() as WorkerApplication;
@@ -131,6 +165,8 @@ export const NotificationManager = () => {
             );
           }
         });
+      }, (error) => {
+        console.error("NotificationManager: unsubApps error", error);
       });
 
       return () => {

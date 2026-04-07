@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Replace the line below with your Google Search Console verification tag -->
+    <!-- <meta name="google-site-verification" content="PASTE_YOUR_CODE_HERE" /> -->
+    <title>Khdmat - خدمات</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans Arabic', sans-serif;
+        }
+        .page {
+            display: none;
+        }
+        .page.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-white text-gray-800">
+
+    <!-- HOME PAGE -->
+    <div id="home" class="page active min-h-screen flex flex-col items-center justify-center p-6 text-center">
+        <div class="mb-8">
+            <h1 class="text-6xl md:text-8xl font-bold text-emerald-600 mb-4">خدمات</h1>
+            <h2 class="text-2xl md:text-3xl font-bold text-gray-700 tracking-widest">KHDMAT</h2>
+        </div>
+        
+        <div class="max-w-2xl mb-12">
+            <p class="text-xl text-gray-600 leading-relaxed">
+                المنصة الرائدة في العراق لربطك بمحترفين موثوقين لخدمات المنزل والعمل. 
+                من السباكة إلى الأعمال الكهربائية، نجعل العثور على المساعدة أمراً سهلاً وموثوقاً.
+            </p>
+            <p class="text-lg text-gray-500 mt-4">
+                Iraq's premier platform connecting skilled service providers with customers. 
+                Whether you need plumbing, electrical work, or home cleaning, Khdmat makes it easy to find trusted professionals.
+            </p>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-4 w-full max-w-md">
+            <button onclick="showPage('terms')" class="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-bold text-lg shadow-lg hover:bg-emerald-700 transition-all">
+                شروط الخدمة <br> <span class="text-sm font-normal">Terms of Service</span>
+            </button>
+            <button onclick="showPage('privacy')" class="flex-1 py-4 border-2 border-emerald-600 text-emerald-600 rounded-2xl font-bold text-lg hover:bg-emerald-50 transition-all">
+                سياسة الخصوصية <br> <span class="text-sm font-normal">Privacy Policy</span>
+            </button>
+        </div>
+
+        <div class="mt-16 text-gray-400 text-sm">
+            &copy; 2026 Khdmat App. All rights reserved.
+        </div>
+    </div>
+
+    <!-- TERMS OF SERVICE PAGE -->
+    <div id="terms" class="page min-h-screen p-6 md:p-12">
+        <div class="max-w-4xl mx-auto">
+            <button onclick="showPage('home')" class="mb-8 flex items-center gap-2 text-emerald-600 font-bold hover:underline">
+                &rarr; العودة للرئيسية (Back to Home)
+            </button>
+            
+            <h1 class="text-4xl font-bold text-emerald-600 mb-8">شروط الخدمة / Terms of Service</h1>
+            
+            <div class="space-y-8 text-gray-700 leading-relaxed">
+                <section>
+                    <h2 class="text-xl font-bold mb-2">1. قبول الشروط (Acceptance)</h2>
+                    <p>باستخدامك لتطبيق خدمات، فإنك توافق على الالتزام بهذه الشروط. / By using Khdmat, you agree to these terms.</p>
+                </section>
+                <section>
+                    <h2 class="text-xl font-bold mb-2">2. وصف الخدمة (Service Description)</h2>
+                    <p>خدمات هي منصة وسيطة تربط بين مزودي الخدمة والزبائن. نحن لسنا مسؤولين عن جودة العمل المباشر. / Khdmat is a platform connecting providers and customers. We are not responsible for direct work quality.</p>
+                </section>
+                <section>
+                    <h2 class="text-xl font-bold mb-2">3. مسؤولية المستخدم (User Responsibility)</h2>
+                    <p>يجب أن تكون المعلومات المقدمة دقيقة وصحيحة. / Information provided must be accurate and truthful.</p>
+                </section>
+                <section>
+                    <h2 class="text-xl font-bold mb-2">4. الدفع (Payments)</h2>
+                    <p>يتم الدفع مباشرة بين الزبون والعامل. / Payments are settled directly between the customer and the worker.</p>
+                </section>
+                <section>
+                    <h2 class="text-xl font-bold mb-2">5. إخلاء المسؤولية (Liability)</h2>
+                    <p>تطبيق خدمات غير مسؤول عن أي أضرار ناتجة عن استخدام المنصة. / Khdmat is not liable for any damages resulting from platform use.</p>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- PRIVACY POLICY PAGE -->
+    <div id="privacy" class="page min-h-screen p-6 md:p-12">
+        <div class="max-w-4xl mx-auto">
+            <button onclick="showPage('home')" class="mb-8 flex items-center gap-2 text-emerald-600 font-bold hover:underline">
+                &rarr; العودة للرئيسية (Back to Home)
+            </button>
+            
+            <h1 class="text-4xl font-bold text-emerald-600 mb-8">سياسة الخصوصية / Privacy Policy</h1>
+            
+            <div class="space-y-8 text-gray-700 leading-relaxed">
+                <section>
+                    <h2 class="text-xl font-bold mb-2">1. جمع المعلومات (Data Collection)</h2>
+                    <p>نقوم بجمع اسمك، رقم هاتفك، وموقعك لتقديم الخدمة. / We collect your name, phone, and location to provide the service.</p>
+                </section>
+                <section>
+                    <h2 class="text-xl font-bold mb-2">2. استخدام البيانات (Data Usage)</h2>
+                    <p>تستخدم البيانات فقط لربطك بمزودي الخدمة وتحسين التطبيق. / Data is used only to connect you with providers and improve the app.</p>
+                </section>
+                <section>
+                    <h2 class="text-xl font-bold mb-2">3. حماية البيانات (Security)</h2>
+                    <p>نحن نتخذ إجراءات أمنية لحماية بياناتك من الوصول غير المصرح به. / We take security measures to protect your data.</p>
+                </section>
+                <section>
+                    <h2 class="text-xl font-bold mb-2">4. مشاركة البيانات (Sharing)</h2>
+                    <p>لا نقوم ببيع بياناتك لأطراف ثالثة. / We do not sell your data to third parties.</p>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showPage(pageId) {
+            // Hide all pages
+            document.querySelectorAll('.page').forEach(page => {
+                page.classList.remove('active');
+            });
+            // Show selected page
+            document.getElementById(pageId).classList.add('active');
+            // Scroll to top
+            window.scrollTo(0, 0);
+        }
+    </script>
+</body>
+</html>

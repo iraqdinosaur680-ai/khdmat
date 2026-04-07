@@ -8,20 +8,35 @@ export class NotificationService {
   private static isPushSupported = Capacitor.getPlatform() !== 'web';
 
   static async requestPermissions() {
-    if (!this.isPushSupported) return false;
+    let pushGranted = false;
+    let localGranted = false;
 
-    let permStatus = await PushNotifications.checkPermissions();
-
-    if (permStatus.receive === 'prompt') {
-      permStatus = await PushNotifications.requestPermissions();
+    // 1. Request Local Notifications permissions (works on web too)
+    try {
+      const localPerms = await LocalNotifications.requestPermissions();
+      localGranted = localPerms.display === 'granted';
+    } catch (e) {
+      console.error('Error requesting local notification permissions:', e);
     }
 
-    if (permStatus.receive !== 'granted') {
-      return false;
+    // 2. Request Push Notifications permissions (mobile only)
+    if (this.isPushSupported) {
+      try {
+        let pushPerms = await PushNotifications.checkPermissions();
+        if (pushPerms.receive === 'prompt') {
+          pushPerms = await PushNotifications.requestPermissions();
+        }
+        pushGranted = pushPerms.receive === 'granted';
+        
+        if (pushGranted) {
+          await PushNotifications.register();
+        }
+      } catch (e) {
+        console.error('Error requesting push notification permissions:', e);
+      }
     }
 
-    await PushNotifications.register();
-    return true;
+    return localGranted || pushGranted;
   }
 
   static async registerToken(userId: string) {

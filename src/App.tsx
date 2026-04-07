@@ -23,12 +23,14 @@ import {
   linkWithPhoneNumber,
   PhoneAuthProvider,
   GoogleAuthProvider,
-  signInWithCredential
+  signInWithCredential,
+  signInWithPhoneNumber,
+  ConfirmationResult
 } from 'firebase/auth';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { Capacitor } from '@capacitor/core';
 import { doc, setDoc, getDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp, getDocFromServer, deleteDoc, limit, updateDoc, writeBatch, getDocs, orderBy } from 'firebase/firestore';
-import { City, IRAQI_CITIES, UserProfile, WorkerProfile, Booking, Message, WorkerApplication, Review, Report } from './types';
+import { City, IRAQI_CITIES, UserProfile, WorkerProfile, Booking, Message, WorkerApplication, Review, Report, Ad } from './types';
 import { cn } from './lib/utils';
 import './i18n';
 import { NotificationManager } from './components/NotificationManager';
@@ -53,6 +55,8 @@ const useSettings = () => {
       if (docSnap.exists()) {
         setSettings(docSnap.data() as AppSettings);
       }
+    }, (error) => {
+      console.error("App: app_settings snapshot error", error);
     });
     return () => unsubscribe();
   }, []);
@@ -155,6 +159,76 @@ const Alert = ({
   );
 };
 
+const CancelBookingDialog = ({ 
+  isOpen, 
+  onConfirm, 
+  onCancel 
+}: { 
+  isOpen: boolean; 
+  onConfirm: (reason: string) => void; 
+  onCancel: () => void;
+}) => {
+  const { t } = useTranslation();
+  const [reason, setReason] = useState('reason_changed_mind');
+
+  if (!isOpen) return null;
+
+  const reasons = [
+    'reason_changed_mind',
+    'reason_found_another',
+    'reason_not_needed',
+    'reason_emergency'
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="bg-white dark:bg-gray-800 rounded-3xl p-6 w-full max-w-sm shadow-2xl"
+      >
+        <h3 className="text-xl font-bold mb-2">{t('cancelBooking')}</h3>
+        <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">{t('confirmCancel')}</p>
+        
+        <div className="space-y-2 mb-6">
+          <label className="text-xs font-bold text-gray-500 uppercase">{t('cancellationReason')}</label>
+          <div className="space-y-2">
+            {reasons.map((r) => (
+              <button
+                key={r}
+                onClick={() => setReason(r)}
+                className={cn(
+                  "w-full p-3 rounded-xl text-sm font-medium text-left transition-all border",
+                  reason === r 
+                    ? "bg-primary/10 border-primary text-primary" 
+                    : "bg-gray-50 dark:bg-gray-900 border-transparent hover:bg-gray-100 dark:hover:bg-gray-800"
+                )}
+              >
+                {t(r)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          <button 
+            onClick={onCancel}
+            className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl font-bold text-sm"
+          >
+            {t('cancel')}
+          </button>
+          <button 
+            onClick={() => onConfirm(reason)}
+            className="flex-1 py-3 bg-red-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-red-500/20"
+          >
+            {t('cancelBooking')}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 const testConnection = async () => {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
@@ -185,19 +259,69 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
   const { t } = useTranslation();
   const [selectedCity, setSelectedCity] = useState<City>('Baghdad');
   const [phone, setPhone] = useState('');
+  const [otp, setOtp] = useState('');
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const recaptchaRef = useRef<HTMLDivElement>(null);
+  const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
 
-  const handleSubmit = async () => {
-    if (phone && phone.length < 10) {
+  const formatPhoneNumber = (p: string) => {
+    let cleaned = p.replace(/\D/g, '');
+    if (cleaned.startsWith('0')) cleaned = cleaned.substring(1);
+    if (cleaned.startsWith('964')) cleaned = cleaned.substring(3);
+    return `+964${cleaned}`;
+  };
+
+  const handleSendOtp = async () => {
+    if (!phone || phone.length < 10) {
       setError(t('enterPhone'));
       return;
     }
+    if (!auth.currentUser) return;
+    setError('');
     setLoading(true);
     try {
-      onComplete(selectedCity, phone);
+      if (!recaptchaVerifier.current && recaptchaRef.current) {
+        recaptchaVerifier.current = new RecaptchaVerifier(auth, recaptchaRef.current, {
+          size: 'invisible',
+        });
+      }
+      
+      const formattedPhone = formatPhoneNumber(phone);
+      // Use linkWithPhoneNumber to attach the phone number to the current account
+      const result = await linkWithPhoneNumber(auth.currentUser, formattedPhone, recaptchaVerifier.current!);
+      setConfirmationResult(result);
     } catch (err: any) {
-      setError(err.message);
+      console.error("Phone Auth Error:", err);
+      if (err.code === 'auth/credential-already-in-use') {
+        setError("This phone number is already linked to another account.");
+      } else {
+        setError(err.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otp || otp.length < 6) {
+      setError(t('invalidOtp'));
+      return;
+    }
+    setError('');
+    setLoading(true);
+    try {
+      if (confirmationResult) {
+        // If we are linking, we might need a different approach, but signInWithPhoneNumber 
+        // can also be used to verify the phone. 
+        // However, if the user is already logged in, we should ideally link.
+        // For simplicity in this flow, we verify the OTP.
+        await confirmationResult.confirm(otp);
+        onComplete(selectedCity, phone);
+      }
+    } catch (err: any) {
+      setError(t('invalidOtp'));
     } finally {
       setLoading(false);
     }
@@ -219,42 +343,150 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
         {error && <p className="text-red-500 text-xs mb-4">{error}</p>}
 
         <div className="space-y-4 mb-6 text-left">
-          <div>
-            <label className="block text-xs font-bold mb-1 text-gray-500">{t('city')}</label>
-            <select
-              value={selectedCity}
-              onChange={(e) => setSelectedCity(e.target.value as City)}
-              className="w-full p-3 border rounded-xl dark:bg-gray-700 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary"
-            >
-              {IRAQI_CITIES.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
+          {!confirmationResult ? (
+            <>
+              <div>
+                <label className="block text-xs font-bold mb-1 text-gray-500">{t('city')}</label>
+                <select
+                  value={selectedCity}
+                  onChange={(e) => setSelectedCity(e.target.value as City)}
+                  className="w-full p-3 border rounded-xl dark:bg-gray-700 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {IRAQI_CITIES.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
 
-          <div>
-            <label className="block text-xs font-bold mb-1 text-gray-500">{t('phone')}</label>
-            <div className="relative">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <div>
+                <label className="block text-xs font-bold mb-1 text-gray-500">{t('phone')}</label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="07XXXXXXXX"
+                    className="w-full pl-10 pr-4 py-3 border rounded-xl dark:bg-gray-700 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <div>
+              <label className="block text-xs font-bold mb-1 text-gray-500">{t('enterOtp')}</label>
               <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="07XXXXXXXX"
-                className="w-full pl-10 pr-4 py-3 border rounded-xl dark:bg-gray-700 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary"
+                type="text"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                placeholder="XXXXXX"
+                className="w-full p-3 border rounded-xl dark:bg-gray-700 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary text-center tracking-[1em] font-bold"
+                maxLength={6}
               />
+              <button 
+                onClick={() => setConfirmationResult(null)}
+                className="text-xs text-primary mt-2 hover:underline"
+              >
+                {t('changeCity')} / {t('phone')}
+              </button>
             </div>
-          </div>
+          )}
         </div>
 
+        <div ref={recaptchaRef}></div>
+
         <button
-          onClick={handleSubmit}
+          onClick={confirmationResult ? handleVerifyOtp : handleSendOtp}
           disabled={loading}
           className="w-full py-4 bg-primary text-white rounded-2xl font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
         >
-          {loading ? t('loading') : t('complete')}
+          {loading ? t('loading') : (confirmationResult ? t('verify') : t('sendCode'))}
         </button>
       </motion.div>
+    </div>
+  );
+};
+
+const PrivacyPolicyPage = () => {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  return (
+    <div className="max-w-4xl mx-auto p-6 py-12">
+      <button 
+        onClick={() => navigate(-1)}
+        className="mb-8 flex items-center gap-2 text-primary font-bold hover:underline"
+      >
+        <ChevronLeft size={20} /> {t('back')}
+      </button>
+      <h1 className="text-3xl font-bold mb-8">{t('privacyPolicy')}</h1>
+      <div className="prose dark:prose-invert max-w-none space-y-6 text-gray-700 dark:text-gray-300">
+        <section>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">1. Introduction</h2>
+          <p>Welcome to Khdmat ("we," "our," or "us"). We are committed to protecting your personal information and your right to privacy. This Privacy Policy explains how we collect, use, and share information when you use our application.</p>
+        </section>
+        <section>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">2. Information We Collect</h2>
+          <p>We collect information that you provide directly to us, such as when you create an account, update your profile, or use our services. This may include your name, email address, phone number, city, and profile photo.</p>
+        </section>
+        <section>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">3. How We Use Your Information</h2>
+          <p>We use the information we collect to provide, maintain, and improve our services, to process transactions, and to communicate with you about your account and our services.</p>
+        </section>
+        <section>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">4. Sharing of Information</h2>
+          <p>We do not share your personal information with third parties except as described in this policy, such as with service providers who perform services on our behalf or when required by law.</p>
+        </section>
+        <section>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">5. Security</h2>
+          <p>We take reasonable measures to help protect information about you from loss, theft, misuse, and unauthorized access.</p>
+        </section>
+        <section>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">6. Contact Us</h2>
+          <p>If you have any questions about this Privacy Policy, please contact us at support@khdmat.iq.</p>
+        </section>
+      </div>
+    </div>
+  );
+};
+
+const TermsOfServicePage = () => {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  return (
+    <div className="max-w-4xl mx-auto p-6 py-12">
+      <button 
+        onClick={() => navigate(-1)}
+        className="mb-8 flex items-center gap-2 text-primary font-bold hover:underline"
+      >
+        <ChevronLeft size={20} /> {t('back')}
+      </button>
+      <h1 className="text-3xl font-bold mb-8">{t('termsOfService')}</h1>
+      <div className="prose dark:prose-invert max-w-none space-y-6 text-gray-700 dark:text-gray-300">
+        <section>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">1. Acceptance of Terms</h2>
+          <p>By accessing or using the Khdmat application, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use the application.</p>
+        </section>
+        <section>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">2. Description of Service</h2>
+          <p>Khdmat provides a platform to connect service providers with customers. We do not provide the services directly and are not responsible for the quality or delivery of services provided by third-party workers.</p>
+        </section>
+        <section>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">3. User Responsibilities</h2>
+          <p>Users are responsible for providing accurate information and for their interactions with other users. You must be at least 18 years old to use this service.</p>
+        </section>
+        <section>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">4. Payments</h2>
+          <p>Payments for services are handled directly between the customer and the service provider. Khdmat is not a party to these transactions and is not responsible for any payment disputes.</p>
+        </section>
+        <section>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">5. Limitation of Liability</h2>
+          <p>Khdmat shall not be liable for any direct, indirect, incidental, special, or consequential damages resulting from the use or inability to use our services.</p>
+        </section>
+        <section>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">6. Changes to Terms</h2>
+          <p>We reserve the right to modify these terms at any time. Your continued use of the application after such changes constitutes your acceptance of the new terms.</p>
+        </section>
+      </div>
     </div>
   );
 };
@@ -278,9 +510,7 @@ const AuthPage = () => {
       let user;
       if (Capacitor.isNativePlatform()) {
         console.log("Starting native Google login...");
-        const result = await FirebaseAuthentication.signInWithGoogle({
-          webClientId: '420174503383-ng18hjfhv6d0clq7c86g0v0s9iq7isad.apps.googleusercontent.com'
-        });
+        const result = await FirebaseAuthentication.signInWithGoogle();
         console.log("Native Google login result:", result);
         
         if (!result.credential?.idToken) {
@@ -296,7 +526,7 @@ const AuthPage = () => {
       }
 
       const userDoc = await getDoc(doc(db, 'users', user.uid));
-      const isAdmin = user.email === 'tahatariq20069@gmail.com';
+      const isAdmin = user.email === 'tahatariq20069@gmail.com' || user.email === 'iraqdinosaur680@gmail.com' || user.email === 'kadmatiq@gmail.com';
       
       // Check if this user is assigned as a worker
       const workersQuery = query(collection(db, 'workers'), where('email', '==', user.email));
@@ -308,7 +538,7 @@ const AuthPage = () => {
       const workerData = isWorker ? workerDocs.docs[0].data() as WorkerProfile : null;
 
       if (!userDoc.exists()) {
-        await setDoc(doc(db, 'users', user.uid), {
+        const userData: any = {
           uid: user.uid,
           name: user.displayName || 'User',
           email: user.email || '',
@@ -316,9 +546,12 @@ const AuthPage = () => {
           photoURL: user.photoURL || '',
           city: workerData?.city || '', 
           role: isAdmin ? 'admin' : (isWorker ? 'worker' : 'user'),
-          workerId: isWorker ? workerData?.uid : null,
           createdAt: Date.now(),
-        });
+        };
+        if (isWorker && workerData?.uid) {
+          userData.workerId = workerData.uid;
+        }
+        await setDoc(doc(db, 'users', user.uid), userData);
       } else {
         const updates: any = {};
         if (isAdmin && userDoc.data()?.role !== 'admin') updates.role = 'admin';
@@ -540,6 +773,16 @@ const AuthPage = () => {
             {isLogin ? t('register') : t('login')}
           </button>
         </p>
+
+        <div className="mt-12 pt-6 border-t border-gray-100 dark:border-gray-700 text-center">
+          <h2 className="text-lg font-bold mb-2">About Khdmat</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Khdmat is Iraq's premier platform connecting skilled service providers with customers. 
+            Whether you need plumbing, electrical work, or home cleaning, Khdmat makes it easy to find 
+            trusted professionals in your city.
+          </p>
+
+        </div>
       </motion.div>
     </div>
   );
@@ -557,6 +800,8 @@ const Header = ({ darkMode, setDarkMode }: { darkMode: boolean, setDarkMode: (v:
         if (docSnap.exists()) {
           setWorkerData(docSnap.data() as WorkerProfile);
         }
+      }, (error) => {
+        console.error("App: workerData dashboard snapshot error", error);
       });
       return () => unsubscribe();
     }
@@ -707,6 +952,69 @@ const BottomNav = () => {
 
 // --- Pages ---
 
+const AdsCarousel = ({ ads }: { ads: Ad[] }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    if (ads.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % ads.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [ads]);
+
+  if (ads.length === 0) return null;
+
+  return (
+    <div className="relative w-full h-40 sm:h-48 overflow-hidden rounded-3xl mb-6 shadow-lg">
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={ads[currentIndex].id}
+          initial={{ opacity: 0, x: 50 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -50 }}
+          transition={{ duration: 0.5 }}
+          className="absolute inset-0"
+        >
+          <a 
+            href={ads[currentIndex].link || '#'} 
+            target={ads[currentIndex].link ? "_blank" : "_self"}
+            rel="noopener noreferrer"
+            className="block w-full h-full relative"
+          >
+            {ads[currentIndex].imageURL && (
+              <img 
+                src={ads[currentIndex].imageURL} 
+                alt={ads[currentIndex].title} 
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent flex flex-col justify-end p-4">
+              <h3 className="text-white font-bold text-lg leading-tight">{ads[currentIndex].title}</h3>
+              <p className="text-white/80 text-xs line-clamp-1">{ads[currentIndex].description}</p>
+            </div>
+          </a>
+        </motion.div>
+      </AnimatePresence>
+      
+      {ads.length > 1 && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+          {ads.map((_, i) => (
+            <div 
+              key={i} 
+              className={cn(
+                "w-1.5 h-1.5 rounded-full transition-all",
+                i === currentIndex ? "bg-white w-4" : "bg-white/50"
+              )} 
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const HomePage = () => {
   const { t, i18n } = useTranslation();
   const { profile } = useAuth();
@@ -720,6 +1028,7 @@ const HomePage = () => {
   const [confirmData, setConfirmData] = useState<{ isOpen: boolean; bookingId: string } | null>(null);
   const [alertData, setAlertData] = useState<{ isOpen: boolean; title: string; message: string; type: 'info' | 'success' | 'error' } | null>(null);
   const [profilesCache, setProfilesCache] = useState<Record<string, { name: string; photoURL?: string }>>({});
+  const [ads, setAds] = useState<Ad[]>([]);
 
   const categories = [
     { id: 'plumbing', icon: '💧', label: t('plumbing') },
@@ -737,6 +1046,17 @@ const HomePage = () => {
     { id: 'securityCameras', icon: '📹', label: t('securityCameras') },
     { id: 'internet', icon: '🌐', label: t('internet') },
   ];
+
+  useEffect(() => {
+    if (!profile) return;
+    const q = query(collection(db, 'ads'), where('active', '==', true), orderBy('order', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setAds(snapshot.docs.map(doc => doc.data() as Ad));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'ads');
+    });
+    return () => unsubscribe();
+  }, [profile]);
 
   useEffect(() => {
     if (!profile?.city) {
@@ -780,6 +1100,8 @@ const HomePage = () => {
       );
       const unsubscribe = onSnapshot(q, (snapshot) => {
         setMyRequests(snapshot.docs.map(doc => doc.data() as Booking));
+      }, (error) => {
+        console.error("App: myRequests snapshot error", error);
       });
       return () => unsubscribe();
     }
@@ -802,6 +1124,8 @@ const HomePage = () => {
         const timeB = b.lastMessageTimestamp || b.timestamp;
         return timeB - timeA;
       }));
+    }, (error) => {
+      console.error("App: recentChats snapshot error", error);
     });
     return () => unsubscribe();
   }, [profile]);
@@ -898,6 +1222,8 @@ const HomePage = () => {
           )}
         </div>
       </div>
+
+      <AdsCarousel ads={ads} />
 
       {/* Categories Grid - Main Focus */}
       <div className="mb-8">
@@ -1127,12 +1453,6 @@ const HomePage = () => {
                   )}
 
                   <div className="mt-4 flex gap-2">
-                    <a 
-                      href={`tel:${worker.phone}`}
-                      className="flex-1 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center gap-2 text-sm font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                    >
-                      <Phone size={16} /> {t('call')}
-                    </a>
                     <button 
                       onClick={() => navigate(`/book/${worker.uid}`)}
                       className="flex-1 py-2 bg-primary text-white rounded-lg flex items-center justify-center gap-2 text-sm font-bold hover:bg-opacity-90 transition-all shadow-md"
@@ -1214,9 +1534,9 @@ const BookingPage = () => {
 
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profile || !worker || !description || !location) {
+    if (!profile || !worker || !description || !locationDescription) {
       if (!description) setAlertData({ isOpen: true, title: t('error'), message: t('enterDescription'), type: 'error' });
-      else if (!location) setAlertData({ isOpen: true, title: t('error'), message: t('enterLocation'), type: 'error' });
+      else if (!locationDescription) setAlertData({ isOpen: true, title: t('error'), message: t('enterLocationDescription'), type: 'error' });
       return;
     }
 
@@ -1250,9 +1570,11 @@ const BookingPage = () => {
       await setDoc(doc(db, 'bookings', bookingId), {
         id: bookingId,
         customerId: profile.uid,
+        customerEmail: profile.email,
         customerName: profile.name,
         customerPhone: profile.phone,
         workerId: worker.uid,
+        workerEmail: worker.email,
         workerName: worker.name,
         workerPhone: worker.phone,
         status: 'pending',
@@ -1262,8 +1584,7 @@ const BookingPage = () => {
         description,
         location,
         locationDescription,
-        lat: coords?.lat,
-        lng: coords?.lng
+        ...(coords ? { lat: coords.lat, lng: coords.lng } : {})
       });
       setAlertData({ 
         isOpen: true, 
@@ -1336,7 +1657,7 @@ const BookingPage = () => {
 
           <div>
             <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">
-              {t('yourLocation')}
+              {t('yourLocation')} <span className="text-xs font-normal text-gray-400">({t('optional')})</span>
             </label>
             <div className="flex flex-col gap-2">
               {coords ? (
@@ -1399,6 +1720,7 @@ const BookingPage = () => {
             </label>
             <input
               type="text"
+              required
               value={locationDescription}
               onChange={(e) => setLocationDescription(e.target.value)}
               placeholder={t('locationDescription')}
@@ -1601,6 +1923,7 @@ const ProfilePage = () => {
   const [ratingData, setRatingData] = useState<{ isOpen: boolean; booking: Booking | null }>({ isOpen: false, booking: null });
   const [reportData, setReportData] = useState<{ isOpen: boolean; booking: Booking | null }>({ isOpen: false, booking: null });
   const [alertData, setAlertData] = useState<{ isOpen: boolean; title: string; message: string; type: 'info' | 'success' | 'error' } | null>(null);
+  const [cancelBookingData, setCancelBookingData] = useState<{ isOpen: boolean; bookingId: string } | null>(null);
   const [profilesCache, setProfilesCache] = useState<Record<string, { name: string; photoURL?: string; phone?: string }>>({});
   const [userReports, setUserReports] = useState<Report[]>([]);
   const [application, setApplication] = useState<WorkerApplication | null>(null);
@@ -1668,6 +1991,8 @@ const ProfilePage = () => {
         if (docSnap.exists()) {
           setWorkerData(docSnap.data() as WorkerProfile);
         }
+      }, (error) => {
+        console.error("App: workerData profile editor snapshot error", error);
       });
       return () => unsubscribe();
     }
@@ -1763,6 +2088,8 @@ const ProfilePage = () => {
     const reportsQ = query(collection(db, 'reports'), where('reporterId', '==', profile.uid));
     const unsubscribeReports = onSnapshot(reportsQ, (snapshot) => {
       setUserReports(snapshot.docs.map(doc => doc.data() as Report));
+    }, (error) => {
+      console.error("App: userReports snapshot error", error);
     });
 
     let unsubscribeApp: (() => void) | undefined;
@@ -1771,6 +2098,8 @@ const ProfilePage = () => {
         if (docSnap.exists()) {
           setApplication(docSnap.data() as WorkerApplication);
         }
+      }, (error) => {
+        console.error("App: workerApplication snapshot error", error);
       });
     }
 
@@ -1783,7 +2112,12 @@ const ProfilePage = () => {
 
   const handleUpdateProfile = async () => {
     if (!profile) return;
-    await setDoc(doc(db, 'users', profile.uid), { ...profile, name, city, phone }, { merge: true });
+    // Don't allow changing phone number if it's already set
+    const updateData = { ...profile, name, city };
+    if (!profile.phone) {
+      (updateData as any).phone = phone;
+    }
+    await setDoc(doc(db, 'users', profile.uid), updateData, { merge: true });
     setIsEditing(false);
   };
 
@@ -1949,12 +2283,6 @@ const ProfilePage = () => {
               >
                 {IRAQI_CITIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-              <input 
-                value={phone} 
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
-                placeholder={t('phone')}
-              />
               <div className="flex gap-2">
                 <button onClick={handleUpdateProfile} className="flex-1 py-2 bg-primary text-white rounded-lg font-bold">{t('save')}</button>
                 <button onClick={() => setIsEditing(false)} className="flex-1 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg font-bold">{t('cancel')}</button>
@@ -1963,7 +2291,12 @@ const ProfilePage = () => {
           ) : (
             <>
               <h2 className="text-2xl font-bold">{profile?.name}</h2>
-              <p className="text-gray-500 flex items-center gap-1 mb-1">{profile?.city}</p>
+              <div className="flex flex-col items-center gap-1 mb-1">
+                <p className="text-gray-500 flex items-center gap-1">{profile?.city}</p>
+                <p className="text-gray-500 flex items-center gap-1">
+                  <Phone size={14} /> {profile?.phone}
+                </p>
+              </div>
               <div className="flex items-center gap-2 mb-4">
                 <span className={cn(
                   "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
@@ -2150,6 +2483,11 @@ const ProfilePage = () => {
                       </p>
                     </div>
                   )}
+                  {booking.status === 'cancelled' && booking.cancellationReason && (
+                    <p className="text-[10px] text-red-500 font-bold mt-1">
+                      {t('cancellationReason')}: {t(booking.cancellationReason)}
+                    </p>
+                  )}
                 </div>
                 <span className={cn(
                   "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
@@ -2163,6 +2501,17 @@ const ProfilePage = () => {
               </div>
               <div className="flex justify-between items-center mt-4">
                 <div className="flex gap-2">
+                  {profile?.role === 'user' && (booking.status === 'pending' || booking.status === 'confirmed') && (
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCancelBookingData({ isOpen: true, bookingId: booking.id });
+                      }}
+                      className="px-3 py-1 bg-red-500 text-white text-xs rounded-lg font-bold flex items-center gap-1"
+                    >
+                      <X size={12} /> {t('cancelBooking')}
+                    </button>
+                  )}
                   {profile?.role === 'worker' && booking.status === 'pending' && (
                     <div className="flex items-center gap-2">
                       <input 
@@ -2277,6 +2626,35 @@ const ProfilePage = () => {
         reportedName={profile?.role === 'worker' ? (reportData.booking?.customerName || '') : (reportData.booking?.workerName || '')}
         reporterRole={profile?.role || 'user'}
       />
+      <CancelBookingDialog 
+        isOpen={!!cancelBookingData?.isOpen}
+        onConfirm={async (reason) => {
+          if (cancelBookingData?.bookingId) {
+            try {
+              await updateDoc(doc(db, 'bookings', cancelBookingData.bookingId), {
+                status: 'cancelled',
+                cancellationReason: reason
+              });
+              setAlertData({
+                isOpen: true,
+                title: t('success'),
+                message: t('bookingCancelled'),
+                type: 'success'
+              });
+            } catch (error) {
+              console.error("Error cancelling booking:", error);
+              setAlertData({
+                isOpen: true,
+                title: t('error'),
+                message: t('error'),
+                type: 'error'
+              });
+            }
+          }
+          setCancelBookingData(null);
+        }}
+        onCancel={() => setCancelBookingData(null)}
+      />
     </div>
   );
 };
@@ -2296,6 +2674,8 @@ const WorkerApplicationPage = () => {
       if (docSnap.exists()) {
         setApplication(docSnap.data() as WorkerApplication);
       }
+    }, (error) => {
+      console.error("App: WorkerApplicationPage snapshot error", error);
     });
     return () => unsubscribe();
   }, [profile]);
@@ -2372,7 +2752,11 @@ const WorkerApplicationPage = () => {
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder={t('phone')}
                 required
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border-none rounded-xl focus:ring-2 focus:ring-primary"
+                readOnly={!!profile?.phone}
+                className={cn(
+                  "w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border-none rounded-xl focus:ring-2 focus:ring-primary",
+                  profile?.phone && "opacity-70 cursor-not-allowed"
+                )}
               />
             </div>
             <div className="space-y-1">
@@ -2428,6 +2812,8 @@ const ChatPage = () => {
           batch.commit().catch(err => handleFirestoreError(err, OperationType.UPDATE, 'messages'));
         }
       }
+    }, (error) => {
+      console.error("App: ChatPage messages snapshot error", error);
     });
     return () => unsubscribe();
   }, [bookingId, profile]);
@@ -2438,10 +2824,17 @@ const ChatPage = () => {
     
     const msgId = Math.random().toString(36).substr(2, 9);
     const timestamp = Date.now();
+    
+    // Get booking to get emails for permissions
+    const bookingDoc = await getDoc(doc(db, 'bookings', bookingId));
+    const bookingData = bookingDoc.exists() ? bookingDoc.data() : null;
+
     const msgData = {
       id: msgId,
       bookingId,
       senderId: profile.uid,
+      customerEmail: bookingData?.customerEmail || '',
+      workerEmail: bookingData?.workerEmail || '',
       text: newMessage,
       timestamp,
       read: false
@@ -2594,13 +2987,24 @@ const AdminDashboard = () => {
   const [workers, setWorkers] = useState<WorkerProfile[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [editingWorker, setEditingWorker] = useState<WorkerProfile | null>(null);
-  const [confirmData, setConfirmData] = useState<{ isOpen: boolean; workerId: string } | null>(null);
+  const [confirmData, setConfirmData] = useState<{ isOpen: boolean; id: string; type: 'worker' | 'ad' } | null>(null);
   const [alertData, setAlertData] = useState<{ isOpen: boolean; title: string; message: string; type: 'info' | 'success' | 'error' } | null>(null);
-  const [activeTab, setActiveTab] = useState<'workers' | 'users' | 'reports' | 'applications' | 'settings'>('workers');
+  const [activeTab, setActiveTab] = useState<'workers' | 'users' | 'reports' | 'applications' | 'settings' | 'ads'>('workers');
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [applications, setApplications] = useState<WorkerApplication[]>([]);
+  const [ads, setAds] = useState<Ad[]>([]);
   const appSettings = useSettings();
+
+  // Ad form state
+  const [adTitle, setAdTitle] = useState('');
+  const [adDescription, setAdDescription] = useState('');
+  const [adImageURL, setAdImageURL] = useState('');
+  const [adLink, setAdLink] = useState('');
+  const [adActive, setAdActive] = useState(true);
+  const [adOrder, setAdOrder] = useState(0);
+  const [isAddingAd, setIsAddingAd] = useState(false);
+  const [editingAd, setEditingAd] = useState<Ad | null>(null);
 
   // Settings form state
   const [supportEmail, setSupportEmail] = useState(appSettings.supportEmail);
@@ -2631,6 +3035,7 @@ const AdminDashboard = () => {
   const [serviceArea, setServiceArea] = useState<City[]>([]);
   const [description, setDescription] = useState('');
   const [photoURL, setPhotoURL] = useState('');
+  const [photos, setPhotos] = useState<string[]>([]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2671,10 +3076,84 @@ const AdminDashboard = () => {
     }
   };
 
+  const handlePhotosChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && photos.length < 3) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const maxSize = 800; // Slightly larger for gallery photos
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > height) {
+            if (width > maxSize) {
+              height *= maxSize / width;
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width *= maxSize / height;
+              height = maxSize;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          ctx?.drawImage(img, 0, 0, width, height);
+          const pngData = canvas.toDataURL('image/png');
+          setPhotos(prev => [...prev, pngData]);
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAdImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const maxWidth = 1200;
+          const maxHeight = 600;
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > maxWidth) {
+            height *= maxWidth / width;
+            width = maxWidth;
+          }
+          if (height > maxHeight) {
+            width *= maxHeight / height;
+            height = maxHeight;
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          ctx?.drawImage(img, 0, 0, width, height);
+          const pngData = canvas.toDataURL('image/png');
+          setAdImageURL(pngData);
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   useEffect(() => {
     const q = query(collection(db, 'workers'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setWorkers(snapshot.docs.map(doc => doc.data() as WorkerProfile));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'workers');
     });
     return () => unsubscribe();
   }, []);
@@ -2684,6 +3163,8 @@ const AdminDashboard = () => {
       const q = query(collection(db, 'users'));
       const unsubscribe = onSnapshot(q, (snapshot) => {
         setAllUsers(snapshot.docs.map(doc => doc.data() as UserProfile));
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'users');
       });
       return () => unsubscribe();
     } else if (activeTab === 'reports') {
@@ -2691,13 +3172,23 @@ const AdminDashboard = () => {
       const unsubscribe = onSnapshot(q, (snapshot) => {
         setReports(snapshot.docs.map(doc => doc.data() as Report));
       }, (error) => {
-        handleFirestoreError(error, OperationType.GET, 'reports');
+        handleFirestoreError(error, OperationType.LIST, 'reports');
       });
       return () => unsubscribe();
     } else if (activeTab === 'applications') {
       const q = query(collection(db, 'workerApplications'), orderBy('timestamp', 'desc'));
       const unsubscribe = onSnapshot(q, (snapshot) => {
         setApplications(snapshot.docs.map(doc => doc.data() as WorkerApplication));
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'workerApplications');
+      });
+      return () => unsubscribe();
+    } else if (activeTab === 'ads') {
+      const q = query(collection(db, 'ads'), orderBy('order', 'asc'));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        setAds(snapshot.docs.map(doc => doc.data() as Ad));
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'ads');
       });
       return () => unsubscribe();
     }
@@ -2715,9 +3206,28 @@ const AdminDashboard = () => {
     setServiceArea([]);
     setDescription('');
     setPhotoURL('');
+    setPhotos([]);
     setIsAdding(false);
     setEditingWorker(null);
   };
+
+  useEffect(() => {
+    if (editingWorker) {
+      setName(editingWorker.name);
+      setEmail(editingWorker.email);
+      setCity(editingWorker.city);
+      setProfession(editingWorker.profession);
+      setPhone(editingWorker.phone);
+      setHours(editingWorker.workingHours);
+      setTransport(editingWorker.hasTransport);
+      setSpecialties(editingWorker.specialties);
+      setServiceArea(editingWorker.service_area);
+      setDescription(editingWorker.description || '');
+      setPhotoURL(editingWorker.photoURL || '');
+      setPhotos(editingWorker.photos || []);
+      setIsAdding(true);
+    }
+  }, [editingWorker]);
 
   const handleSave = async () => {
     try {
@@ -2735,6 +3245,7 @@ const AdminDashboard = () => {
         hasTransport: transport,
         description,
         photoURL,
+        photos,
         rating: editingWorker?.rating || 5.0,
         location: editingWorker?.location || { lat: 33.3152, lng: 44.3661 },
         role: 'worker',
@@ -2773,7 +3284,7 @@ const AdminDashboard = () => {
   };
 
   const handleDelete = async (uid: string) => {
-    setConfirmData({ isOpen: true, workerId: uid });
+    setConfirmData({ isOpen: true, id: uid, type: 'worker' });
   };
 
   const handleUpdateSettings = async () => {
@@ -2858,6 +3369,42 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleSaveAd = async () => {
+    try {
+      const id = editingAd?.id || Math.random().toString(36).substr(2, 9);
+      const adData: Ad = {
+        id,
+        title: adTitle,
+        description: adDescription,
+        imageURL: adImageURL,
+        link: adLink,
+        active: adActive,
+        order: Number(adOrder),
+        createdAt: editingAd?.createdAt || Date.now()
+      };
+
+      await setDoc(doc(db, 'ads', id), adData);
+      resetAdForm();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'ads');
+    }
+  };
+
+  const resetAdForm = () => {
+    setAdTitle('');
+    setAdDescription('');
+    setAdImageURL('');
+    setAdLink('');
+    setAdActive(true);
+    setAdOrder(0);
+    setIsAddingAd(false);
+    setEditingAd(null);
+  };
+
+  const handleDeleteAd = async (id: string) => {
+    setConfirmData({ isOpen: true, id, type: 'ad' });
+  };
+
   if (profile?.role !== 'admin') return <Navigate to="/" />;
 
   return (
@@ -2867,12 +3414,16 @@ const AdminDashboard = () => {
         title={t('confirmDelete')}
         message={t('confirmDeleteMessage')}
         onConfirm={async () => {
-          if (confirmData?.workerId) {
+          if (confirmData?.id) {
             try {
-              await deleteDoc(doc(db, 'workers', confirmData.workerId));
-              await deleteDoc(doc(db, 'users', confirmData.workerId));
+              if (confirmData.type === 'worker') {
+                await deleteDoc(doc(db, 'workers', confirmData.id));
+                await deleteDoc(doc(db, 'users', confirmData.id));
+              } else if (confirmData.type === 'ad') {
+                await deleteDoc(doc(db, 'ads', confirmData.id));
+              }
             } catch (error) {
-              handleFirestoreError(error, OperationType.DELETE, `workers/${confirmData.workerId}`);
+              handleFirestoreError(error, OperationType.DELETE, `${confirmData.type === 'worker' ? 'workers' : 'ads'}/${confirmData.id}`);
             }
           }
           setConfirmData(null);
@@ -2936,6 +3487,15 @@ const AdminDashboard = () => {
           )}
         >
           <FileText size={16} /> {t('applications')}
+        </button>
+        <button 
+          onClick={() => setActiveTab('ads')}
+          className={cn(
+            "flex-1 py-2 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2",
+            activeTab === 'ads' ? "bg-white dark:bg-gray-800 shadow-sm text-primary" : "text-gray-500"
+          )}
+        >
+          <Pin size={16} /> {t('ads')}
         </button>
         <button 
           onClick={() => setActiveTab('settings')}
@@ -3042,6 +3602,40 @@ const AdminDashboard = () => {
                     placeholder={t('workerDescription')} 
                     className="p-2 border rounded-lg dark:bg-gray-700 h-24 resize-none" 
                   />
+                  
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold flex items-center justify-between">
+                      <span>{t('photos')} ({photos.length}/3)</span>
+                      <span className="text-[10px] text-gray-500 font-normal">{t('maxPhotos')}</span>
+                    </label>
+                    <div className="flex flex-wrap gap-3">
+                      {photos.map((p, idx) => p && (
+                        <div key={idx} className="relative group">
+                          <img src={p} alt={`Photo ${idx + 1}`} className="w-20 h-20 rounded-xl object-cover border-2 border-primary/20" referrerPolicy="no-referrer" />
+                          <button 
+                            type="button"
+                            onClick={() => setPhotos(prev => prev.filter((_, i) => i !== idx))}
+                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                      {photos.length < 3 && (
+                        <label className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors">
+                          <Camera size={20} className="text-gray-400" />
+                          <span className="text-[8px] mt-1 text-gray-400">{t('addPhoto')}</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            onChange={handlePhotosChange} 
+                            className="hidden"
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+
                   <input value={hours} onChange={e => setHours(e.target.value)} placeholder={t('workingHours')} className="p-2 border rounded-lg dark:bg-gray-700" />
                   <div className="items-center gap-2 flex">
                     <input type="checkbox" checked={transport} onChange={e => setTransport(e.target.checked)} id="transport" />
@@ -3212,6 +3806,166 @@ const AdminDashboard = () => {
               <p>{t('noApplications')}</p>
             </div>
           )}
+        </div>
+      ) : activeTab === 'ads' ? (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-bold">{t('manageAds')}</h3>
+            <button 
+              onClick={() => setIsAddingAd(true)}
+              className="px-4 py-2 bg-primary text-white rounded-xl font-bold text-sm flex items-center gap-2"
+            >
+              <Plus size={16} /> {t('addAd')}
+            </button>
+          </div>
+
+          <AnimatePresence>
+            {(isAddingAd || editingAd) && (
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-xl border border-primary/20"
+              >
+                <h4 className="text-lg font-bold mb-4">{editingAd ? t('editAd') : t('addAd')}</h4>
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-500 uppercase">{t('adTitle')}</label>
+                    <input 
+                      value={adTitle} 
+                      onChange={e => setAdTitle(e.target.value)} 
+                      className="w-full p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-500 uppercase">{t('adDescription')}</label>
+                    <textarea 
+                      value={adDescription} 
+                      onChange={e => setAdDescription(e.target.value)} 
+                      className="w-full p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border-none focus:ring-2 focus:ring-primary h-24 resize-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-500 uppercase">{t('adLink')}</label>
+                    <input 
+                      value={adLink} 
+                      onChange={e => setAdLink(e.target.value)} 
+                      className="w-full p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border-none focus:ring-2 focus:ring-primary"
+                      placeholder="https://..."
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-gray-500 uppercase">{t('adOrder')}</label>
+                      <input 
+                        type="number"
+                        value={adOrder} 
+                        onChange={e => setAdOrder(Number(e.target.value))} 
+                        className="w-full p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 pt-6">
+                      <input 
+                        type="checkbox" 
+                        id="adActive"
+                        checked={adActive} 
+                        onChange={e => setAdActive(e.target.checked)} 
+                        className="w-5 h-5 rounded text-primary focus:ring-primary"
+                      />
+                      <label htmlFor="adActive" className="text-sm font-bold">{t('adActive')}</label>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-500 uppercase">{t('adImage')}</label>
+                    <div className="flex items-center gap-4">
+                      {adImageURL && (
+                        <div className="relative group">
+                          <img src={adImageURL} alt="Preview" className="w-24 h-12 rounded-lg object-cover border border-gray-200" referrerPolicy="no-referrer" />
+                          <button 
+                            onClick={() => setAdImageURL('')}
+                            className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full shadow-lg transition-opacity"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      )}
+                      <label className="flex-1 p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 flex items-center justify-center cursor-pointer hover:border-primary transition-colors">
+                        <Camera size={20} className="text-gray-400 mr-2" />
+                        <span className="text-sm text-gray-500">{t('addPhoto')}</span>
+                        <input type="file" accept="image/*" onChange={handleAdImageChange} className="hidden" />
+                      </label>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 pt-4">
+                    <button 
+                      onClick={handleSaveAd}
+                      className="flex-1 py-3 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20"
+                    >
+                      {t('save')}
+                    </button>
+                    <button 
+                      onClick={resetAdForm}
+                      className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl font-bold"
+                    >
+                      {t('cancel')}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="grid gap-4">
+            {ads.length === 0 ? (
+              <div className="text-center py-12 bg-gray-50 dark:bg-gray-900/50 rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-800">
+                <Pin size={48} className="mx-auto text-gray-300 mb-4" />
+                <p className="text-gray-500">{t('noAds')}</p>
+              </div>
+            ) : (
+              ads.map(ad => (
+                <div key={ad.id} className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-md flex gap-4 items-center">
+                  {ad.imageURL && (
+                    <img src={ad.imageURL} alt={ad.title} className="w-24 h-16 rounded-xl object-cover" referrerPolicy="no-referrer" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h5 className="font-bold truncate">{ad.title}</h5>
+                      {!ad.active && (
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-500 text-[10px] rounded-full font-bold uppercase">
+                          {t('unavailable')}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 line-clamp-1">{ad.description}</p>
+                    <p className="text-[10px] text-primary font-bold mt-1">{t('adOrder')}: {ad.order}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => {
+                        setEditingAd(ad);
+                        setAdTitle(ad.title);
+                        setAdDescription(ad.description);
+                        setAdImageURL(ad.imageURL);
+                        setAdLink(ad.link || '');
+                        setAdActive(ad.active);
+                        setAdOrder(ad.order);
+                        setIsAddingAd(true);
+                      }}
+                      className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      <Edit3 size={18} />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteAd(ad.id)}
+                      className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       ) : (
         <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md space-y-6">
@@ -3453,6 +4207,27 @@ const WorkerProfilePage = () => {
             </div>
           )}
 
+          {worker.photos && worker.photos.length > 0 && (
+            <div className="w-full mb-6">
+              <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
+                <Camera size={16} className="text-primary" /> {t('photos')}
+              </h3>
+              <div className="grid grid-cols-3 gap-3">
+                {worker.photos.filter(p => !!p).map((p, idx) => (
+                  <motion.div 
+                    key={idx}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="aspect-square rounded-2xl overflow-hidden shadow-md border border-gray-100 dark:border-gray-700 cursor-pointer"
+                    onClick={() => window.open(p, '_blank')}
+                  >
+                    <img src={p} alt={`Work ${idx + 1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {worker.specialties && worker.specialties.length > 0 && (
             <div className="w-full mb-6">
               <h3 className="text-sm font-bold mb-2">{t('specialties')}</h3>
@@ -3543,6 +4318,7 @@ const AppContent = () => {
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true');
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleProfileSetup = async (city: City, phone: string) => {
     if (!user) return;
@@ -3593,10 +4369,12 @@ const AppContent = () => {
   }, [i18n.language]);
 
   if (!isAuthReady || loading) return <LoadingScreen />;
+  
+  const isPublicPage = ['/privacy', '/terms'].includes(location.pathname);
 
-  if (!user) return <AuthPage />;
+  if (!user && !isPublicPage) return <AuthPage />;
 
-  const showProfileSetup = !profile || !profile.city;
+  const showProfileSetup = !profile || !profile.city || !profile.phone;
   const isEmailVerified = user?.emailVerified || user?.providerData.some(p => p.providerId === 'google.com');
 
   const handleResendEmail = async () => {
@@ -3613,7 +4391,7 @@ const AppContent = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <NotificationManager />
-      <Header darkMode={darkMode} setDarkMode={setDarkMode} />
+      {user && <Header darkMode={darkMode} setDarkMode={setDarkMode} />}
       {!isEmailVerified && user && (
         <div className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 px-4 py-2 text-xs text-center flex items-center justify-center gap-4">
           <div className="flex items-center gap-2">
@@ -3638,10 +4416,12 @@ const AppContent = () => {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/admin" element={profile?.role === 'admin' ? <AdminDashboard /> : <Navigate to="/" />} />
           <Route path="/chat/:bookingId" element={<ChatPage />} />
+          <Route path="/privacy" element={<PrivacyPolicyPage />} />
+          <Route path="/terms" element={<TermsOfServicePage />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </main>
-      <BottomNav />
+      {user && <BottomNav />}
       {showProfileSetup && <ProfileSetupPopup onComplete={handleProfileSetup} />}
     </div>
   );

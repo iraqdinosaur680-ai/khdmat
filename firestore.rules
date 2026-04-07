@@ -79,8 +79,8 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-         ((request.auth.token.email == "mushtaqq.rh@gmail.com" || request.auth.token.email == "tahatariq20069@gmail.com" || request.auth.token.email == "iraqdinosaur680@gmail.com") && request.auth.token.email_verified == true));
+        (((request.auth.token.email == "mushtaqq.rh@gmail.com" || request.auth.token.email == "tahatariq20069@gmail.com" || request.auth.token.email == "iraqdinosaur680@gmail.com" || request.auth.token.email == "kadmatiq@gmail.com") && request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
     }
 
     function isValidEmail(email) {
@@ -107,7 +107,7 @@ service cloud.firestore {
              (!('phone' in data) || data.phone is string) &&
              (!('workerId' in data) || data.workerId is string) &&
              (!('fcmToken' in data) || (data.fcmToken is string && data.fcmToken.size() < 500)) &&
-             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() < 200000));
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() < 1000000));
     }
 
     function isValidWorker(data) {
@@ -125,18 +125,34 @@ service cloud.firestore {
              (!('service_area' in data) || (data.service_area is list && data.service_area.size() <= 20)) &&
              (!('isAvailable' in data) || data.isAvailable is bool) &&
              (!('description' in data) || (data.description is string && data.description.size() < 2000)) &&
-             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() < 200000));
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() < 1000000)) &&
+             (!('photos' in data) || (data.photos is list && data.photos.size() <= 3));
+    }
+
+    function isValidAd(data) {
+      return data.keys().hasAll(['id', 'title', 'description', 'imageURL', 'active', 'order', 'createdAt']) &&
+             data.id is string &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
+             data.description is string && data.description.size() < 500 &&
+             data.imageURL is string && data.imageURL.size() < 1000000 &&
+             data.active is bool &&
+             data.order is number &&
+             data.createdAt is number;
     }
 
     function isValidBooking(data) {
       return data.keys().hasAll(['id', 'customerId', 'customerName', 'workerId', 'workerName', 'status', 'timestamp', 'category', 'city', 'description', 'location']) &&
+             (resource != null || data.keys().hasAll(['locationDescription'])) &&
              data.status in ['pending', 'confirmed', 'completed', 'cancelled', 'denied'] &&
              data.timestamp is number &&
              data.customerName is string && data.customerName.size() > 0 &&
              data.workerName is string && data.workerName.size() > 0 &&
              data.city is string &&
              data.description is string && data.description.size() > 0 && data.description.size() < 1000 &&
-             data.location is string && data.location.size() > 0 && data.location.size() < 500 &&
+             data.location is string && data.location.size() >= 0 && data.location.size() < 500 &&
+             (!('locationDescription' in data) || (data.locationDescription is string && data.locationDescription.size() > 0 && data.locationDescription.size() < 500)) &&
+             (!('customerEmail' in data) || isValidEmail(data.customerEmail)) &&
+             (!('workerEmail' in data) || isValidEmail(data.workerEmail)) &&
              (!('lastMessage' in data) || (data.lastMessage is string && data.lastMessage.size() < 1000)) &&
              (!('lastMessageSenderId' in data) || data.lastMessageSenderId is string) &&
              (!('lastMessageTimestamp' in data) || data.lastMessageTimestamp is number) &&
@@ -144,7 +160,8 @@ service cloud.firestore {
              (!('lat' in data) || data.lat is number) &&
              (!('lng' in data) || data.lng is number) &&
              (!('rating' in data) || (data.rating is number && data.rating >= 1 && data.rating <= 5)) &&
-             (!('review' in data) || (data.review is string && data.review.size() < 1000));
+             (!('review' in data) || (data.review is string && data.review.size() < 1000)) &&
+             (!('cancellationReason' in data) || (data.cancellationReason is string && data.cancellationReason.size() < 100));
     }
 
     function isValidMessage(data) {
@@ -152,6 +169,8 @@ service cloud.firestore {
              data.senderId == request.auth.uid &&
              data.text is string && data.text.size() > 0 && data.text.size() < 1000 &&
              data.timestamp is number &&
+             (!('customerEmail' in data) || isValidEmail(data.customerEmail)) &&
+             (!('workerEmail' in data) || isValidEmail(data.workerEmail)) &&
              (!('read' in data) || data.read is bool);
     }
 
@@ -186,7 +205,7 @@ service cloud.firestore {
              data.details is string &&
              data.timestamp is number &&
              data.status == 'pending' &&
-             data.language in ['en', 'ar'];
+             data.language is string;
     }
 
     // ===============================================================
@@ -196,9 +215,9 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
-                    (isAdmin() || (isOwner(uid) && request.resource.data.uid == request.auth.uid && request.resource.data.role == 'user'));
+                    (isAdmin() || (isOwner(uid) && request.resource.data.uid == request.auth.uid && (request.resource.data.role == 'user' || request.resource.data.role == 'worker')));
       allow update: if isAuthenticated() && (isOwner(uid) || isAdmin()) && isValidUser(request.resource.data) && 
-                    (isAdmin() || (request.resource.data.uid == resource.data.uid && request.resource.data.role == resource.data.role));
+                    (isAdmin() || (request.resource.data.uid == resource.data.uid && request.resource.data.role == resource.data.role && (!('phone' in resource.data) || request.resource.data.phone == resource.data.phone)));
       allow delete: if isAdmin();
     }
 
@@ -215,17 +234,20 @@ service cloud.firestore {
     match /bookings/{bookingId} {
       allow read: if isAuthenticated() && (
         request.auth.uid == resource.data.customerId || 
+        request.auth.token.email == resource.data.workerEmail ||
         (isWorker() && getWorkerId() == resource.data.workerId) || 
         isAdmin()
       );
       allow create: if isAuthenticated() && isValidBooking(request.resource.data) && request.resource.data.customerId == request.auth.uid;
       allow update: if isAuthenticated() && (
         request.auth.uid == resource.data.customerId || 
+        request.auth.token.email == resource.data.workerEmail ||
         (isWorker() && getWorkerId() == resource.data.workerId) || 
         isAdmin()
       ) && isValidBooking(request.resource.data);
       allow delete: if isAuthenticated() && (
         request.auth.uid == resource.data.customerId || 
+        request.auth.token.email == resource.data.workerEmail ||
         (isWorker() && getWorkerId() == resource.data.workerId) || 
         isAdmin()
       );
@@ -233,14 +255,20 @@ service cloud.firestore {
 
     match /messages/{messageId} {
        allow read: if isAuthenticated() && (isAdmin() || 
+         request.auth.token.email == resource.data.customerEmail ||
+         request.auth.token.email == resource.data.workerEmail ||
          request.auth.uid == get(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.customerId ||
          (isWorker() && getWorkerId() == get(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.workerId));
        allow create: if isAuthenticated() && isValidMessage(request.resource.data) && (
+         request.auth.token.email == request.resource.data.customerEmail ||
+         request.auth.token.email == request.resource.data.workerEmail ||
          request.auth.uid == get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.customerId ||
          (isWorker() && getWorkerId() == get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.workerId) ||
          isAdmin()
        );
        allow update: if isAuthenticated() && (
+         request.auth.token.email == resource.data.customerEmail ||
+         request.auth.token.email == resource.data.workerEmail ||
          request.auth.uid == get(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.customerId ||
          (isWorker() && getWorkerId() == get(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.workerId)
        ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) && request.resource.data.read == true;
@@ -270,6 +298,12 @@ service cloud.firestore {
     match /settings/{settingId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
+    }
+
+    match /ads/{adId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() && isValidAd(request.resource.data);
+      allow delete: if isAdmin();
     }
   }
 }

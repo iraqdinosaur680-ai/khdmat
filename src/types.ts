@@ -32,6 +32,7 @@ export interface WorkerProfile extends UserProfile {
   rating: number;
   isAvailable?: boolean;
   description?: string;
+  photos?: string[];
   location: {
     lat: number;
     lng: number;
@@ -41,9 +42,11 @@ export interface WorkerProfile extends UserProfile {
 export interface Booking {
   id: string;
   customerId: string;
+  customerEmail?: string;
   customerName: string;
   customerPhone: string;
   workerId: string;
+  workerEmail?: string;
   workerName: string;
   workerPhone: string;
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'denied';
@@ -61,12 +64,15 @@ export interface Booking {
   lastMessageSenderId?: string;
   lastMessageTimestamp?: number;
   scheduledTime?: string;
+  cancellationReason?: string;
 }
 
 export interface Message {
   id: string;
   bookingId: string;
   senderId: string;
+  customerEmail?: string;
+  workerEmail?: string;
   text: string;
   timestamp: number;
   read?: boolean;
@@ -111,4 +117,15 @@ export interface AppSettings {
   useInternalApplications?: boolean;
   becomeWorkerWhatsappMessage?: string;
   becomeWorkerWhatsappNumber?: string;
+}
+
+export interface Ad {
+  id: string;
+  title: string;
+  description: string;
+  imageURL: string;
+  link?: string;
+  active: boolean;
+  order: number;
+  createdAt: number;
 }

@@ -34,6 +34,11 @@
             "lat": { "type": "number" },
             "lng": { "type": "number" }
           }
+        },
+        "photos": {
+          "type": "array",
+          "items": { "type": "string" },
+          "maxItems": 3
         }
       },
       "required": ["uid", "profession", "workingHours", "hasTransport", "rating", "phone", "location"]
@@ -45,8 +50,10 @@
       "properties": {
         "id": { "type": "string" },
         "customerId": { "type": "string" },
+        "customerEmail": { "type": "string", "format": "email" },
         "workerId": { "type": "string" },
-        "status": { "type": "string", "enum": ["pending", "confirmed", "completed", "cancelled"] },
+        "workerEmail": { "type": "string", "format": "email" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "completed", "cancelled", "denied"] },
         "timestamp": { "type": "number" },
         "category": { "type": "string" },
         "city": { "type": "string" },
@@ -67,6 +74,8 @@
         "id": { "type": "string" },
         "bookingId": { "type": "string" },
         "senderId": { "type": "string" },
+        "customerEmail": { "type": "string", "format": "email" },
+        "workerEmail": { "type": "string", "format": "email" },
         "text": { "type": "string" },
         "timestamp": { "type": "number" }
       },
@@ -96,6 +105,22 @@
         "whatsappNumber": { "type": "string" }
       },
       "required": ["supportEmail", "supportPhone", "whatsappNumber"]
+    },
+    "Ad": {
+      "title": "Ad",
+      "description": "Promotional banners for the home page.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "imageURL": { "type": "string" },
+        "link": { "type": "string" },
+        "active": { "type": "boolean" },
+        "order": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "title", "description", "imageURL", "active", "order", "createdAt"]
     }
   },
   "firestore": {
@@ -122,6 +147,10 @@
     "/settings/{settingId}": {
       "schema": "AppSettings",
       "description": "Global app settings."
+    },
+    "/ads/{adId}": {
+      "schema": "Ad",
+      "description": "Promotional banners."
     }
   }
 }
