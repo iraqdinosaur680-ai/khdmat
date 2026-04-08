@@ -239,7 +239,8 @@ const resources = {
       noCategories: 'No categories found.',
       fillAllFields: 'Please fill all required fields',
       seedCategories: 'Seed Default Categories',
-      enterScheduledTime: 'Enter date and time (e.g. Tomorrow 10 AM)'
+      enterScheduledTime: 'Enter date and time (e.g. Tomorrow 10 AM)',
+      tooManyRequests: 'Too many requests. Please wait a few minutes and try again.'
     },
   },
   ar: {
@@ -478,7 +479,8 @@ const resources = {
       noCategories: 'لا توجد فئات.',
       fillAllFields: 'يرجى ملء جميع الحقول المطلوبة',
       seedCategories: 'إضافة الفئات الافتراضية',
-      enterScheduledTime: 'أدخل التاريخ والوقت (مثلاً: غداً الساعة 10 صباحاً)'
+      enterScheduledTime: 'أدخل التاريخ والوقت (مثلاً: غداً الساعة 10 صباحاً)',
+      tooManyRequests: 'طلبات كثيرة جداً. يرجى الانتظار بضع دقائق والمحاولة مرة أخرى.'
     },
   },
   ku: {
@@ -717,7 +719,8 @@ const resources = {
       noCategories: 'هیچ پۆلێک نەدۆزرایەوە.',
       fillAllFields: 'تکایە هەموو خانە داواکراوەکان پڕ بکەرەوە',
       seedCategories: 'زیادکردنی پۆلە بنەڕەتییەکان',
-      enterScheduledTime: 'بەروار و کات بنووسە (بۆ نموونە: بەیانی کاتژمێر ١٠)'
+      enterScheduledTime: 'بەروار و کات بنووسە (بۆ نموونە: بەیانی کاتژمێر ١٠)',
+      tooManyRequests: 'داواکاری زۆرە. تکایە چەند خولەکێک چاوەڕێ بکە و دووبارە هەوڵ بدەرەوە.'
     },
   },
 };

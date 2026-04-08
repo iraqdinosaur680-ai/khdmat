@@ -261,8 +261,29 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
   const recaptchaRef = useRef<HTMLDivElement>(null);
   const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
+
+  useEffect(() => {
+    if (cooldown > 0) {
+      const timer = setTimeout(() => setCooldown(cooldown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [cooldown]);
+
+  useEffect(() => {
+    return () => {
+      if (recaptchaVerifier.current) {
+        try {
+          recaptchaVerifier.current.clear();
+        } catch (e) {
+          console.error("Cleanup error:", e);
+        }
+        recaptchaVerifier.current = null;
+      }
+    };
+  }, []);
 
   const formatPhoneNumber = (p: string) => {
     let cleaned = p.replace(/\D/g, '');
@@ -272,6 +293,7 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
   };
 
   const handleSendOtp = async () => {
+    if (cooldown > 0) return;
     if (!phone || phone.length < 10) {
       setError(t('enterPhone'));
       return;
@@ -280,8 +302,22 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
     setError('');
     setLoading(true);
     try {
-      if (!recaptchaVerifier.current && recaptchaRef.current) {
-        recaptchaVerifier.current = new RecaptchaVerifier(auth, recaptchaRef.current, {
+      // Ensure we have a clean state for reCAPTCHA to avoid "already rendered" error
+      if (recaptchaVerifier.current) {
+        try {
+          recaptchaVerifier.current.clear();
+        } catch (e) {
+          // Ignore clear errors
+        }
+        recaptchaVerifier.current = null;
+      }
+      
+      if (recaptchaRef.current) {
+        recaptchaRef.current.innerHTML = '';
+        // Create a fresh container inside the ref to avoid "already rendered" error
+        const container = document.createElement('div');
+        recaptchaRef.current.appendChild(container);
+        recaptchaVerifier.current = new RecaptchaVerifier(auth, container, {
           size: 'invisible',
         });
       }
@@ -290,12 +326,31 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
       // Use linkWithPhoneNumber to attach the phone number to the current account
       const result = await linkWithPhoneNumber(auth.currentUser, formattedPhone, recaptchaVerifier.current!);
       setConfirmationResult(result);
+      setCooldown(60);
     } catch (err: any) {
       console.error("Phone Auth Error:", err);
-      if (err.code === 'auth/credential-already-in-use') {
-        setError("This phone number is already linked to another account.");
+      const errorMessage = err.message || '';
+      if (err.code === 'auth/too-many-requests' || errorMessage.includes('too-many-requests')) {
+        setError(t('tooManyRequests'));
+        setCooldown(120); // Longer cooldown for rate limiting
+      } else if (err.code === 'auth/credential-already-in-use') {
+        setError(t('phoneAlreadyRegistered'));
+      } else if (errorMessage.includes('reCAPTCHA has already been rendered')) {
+        setError(t('error')); // Generic error or something specific
+        // Force a reset
+        if (recaptchaVerifier.current) {
+          try { recaptchaVerifier.current.clear(); } catch (e) {}
+          recaptchaVerifier.current = null;
+        }
       } else {
         setError(err.message);
+      }
+      // Reset recaptcha on error
+      if (recaptchaVerifier.current) {
+        try {
+          recaptchaVerifier.current.clear();
+        } catch (e) {}
+        recaptchaVerifier.current = null;
       }
     } finally {
       setLoading(false);
@@ -395,10 +450,10 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
 
         <button
           onClick={confirmationResult ? handleVerifyOtp : handleSendOtp}
-          disabled={loading}
-          className="w-full py-4 bg-primary text-white rounded-2xl font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+          disabled={loading || cooldown > 0}
+          className="w-full py-4 bg-primary text-white rounded-2xl font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {loading ? t('loading') : (confirmationResult ? t('verify') : t('sendCode'))}
+          {loading ? t('loading') : (confirmationResult ? t('verify') : (cooldown > 0 ? `${t('sendCode')} (${cooldown}s)` : t('sendCode')))}
         </button>
       </motion.div>
     </div>
