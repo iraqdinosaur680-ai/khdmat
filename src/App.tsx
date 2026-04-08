@@ -231,7 +231,7 @@ const testConnection = async () => {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
+    if (error instanceof Error && error.message?.includes('the client is offline')) {
       console.error("Please check your Firebase configuration.");
     }
   }
@@ -257,69 +257,21 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
   const { t } = useTranslation();
   const [selectedCity, setSelectedCity] = useState<City>('Baghdad');
   const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
-  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const recaptchaRef = useRef<HTMLDivElement>(null);
-  const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
 
-  const formatPhoneNumber = (p: string) => {
-    let cleaned = p.replace(/\D/g, '');
-    if (cleaned.startsWith('0')) cleaned = cleaned.substring(1);
-    if (cleaned.startsWith('964')) cleaned = cleaned.substring(3);
-    return `+964${cleaned}`;
-  };
-
-  const handleSendOtp = async () => {
+  const handleSubmit = async () => {
     if (!phone || phone.length < 10) {
       setError(t('enterPhone'));
       return;
     }
-    if (!auth.currentUser) return;
     setError('');
     setLoading(true);
     try {
-      if (!recaptchaVerifier.current && recaptchaRef.current) {
-        recaptchaVerifier.current = new RecaptchaVerifier(auth, recaptchaRef.current, {
-          size: 'invisible',
-        });
-      }
-      
-      const formattedPhone = formatPhoneNumber(phone);
-      // Use linkWithPhoneNumber to attach the phone number to the current account
-      const result = await linkWithPhoneNumber(auth.currentUser, formattedPhone, recaptchaVerifier.current!);
-      setConfirmationResult(result);
+      onComplete(selectedCity, phone);
     } catch (err: any) {
-      console.error("Phone Auth Error:", err);
-      if (err.code === 'auth/credential-already-in-use') {
-        setError("This phone number is already linked to another account.");
-      } else {
-        setError(err.message);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async () => {
-    if (!otp || otp.length < 6) {
-      setError(t('invalidOtp'));
-      return;
-    }
-    setError('');
-    setLoading(true);
-    try {
-      if (confirmationResult) {
-        // If we are linking, we might need a different approach, but signInWithPhoneNumber 
-        // can also be used to verify the phone. 
-        // However, if the user is already logged in, we should ideally link.
-        // For simplicity in this flow, we verify the OTP.
-        await confirmationResult.confirm(otp);
-        onComplete(selectedCity, phone);
-      }
-    } catch (err: any) {
-      setError(t('invalidOtp'));
+      console.error("Profile Setup Error:", err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -341,64 +293,40 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
         {error && <p className="text-red-500 text-xs mb-4">{error}</p>}
 
         <div className="space-y-4 mb-6 text-left">
-          {!confirmationResult ? (
-            <>
-              <div>
-                <label className="block text-xs font-bold mb-1 text-gray-500">{t('city')}</label>
-                <select
-                  value={selectedCity}
-                  onChange={(e) => setSelectedCity(e.target.value as City)}
-                  className="w-full p-3 border rounded-xl dark:bg-gray-700 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary"
-                >
-                  {IRAQI_CITIES.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
+          <div>
+            <label className="block text-xs font-bold mb-1 text-gray-500">{t('city')}</label>
+            <select
+              value={selectedCity}
+              onChange={(e) => setSelectedCity(e.target.value as City)}
+              className="w-full p-3 border rounded-xl dark:bg-gray-700 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary"
+            >
+              {IRAQI_CITIES.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
 
-              <div>
-                <label className="block text-xs font-bold mb-1 text-gray-500">{t('phone')}</label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="07XXXXXXXX"
-                    className="w-full pl-10 pr-4 py-3 border rounded-xl dark:bg-gray-700 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-              </div>
-            </>
-          ) : (
-            <div>
-              <label className="block text-xs font-bold mb-1 text-gray-500">{t('enterOtp')}</label>
+          <div>
+            <label className="block text-xs font-bold mb-1 text-gray-500">{t('phone')}</label>
+            <div className="relative">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input
-                type="text"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                placeholder="XXXXXX"
-                className="w-full p-3 border rounded-xl dark:bg-gray-700 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary text-center tracking-[1em] font-bold"
-                maxLength={6}
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="07XXXXXXXX"
+                className="w-full pl-10 pr-4 py-3 border rounded-xl dark:bg-gray-700 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary"
               />
-              <button 
-                onClick={() => setConfirmationResult(null)}
-                className="text-xs text-primary mt-2 hover:underline"
-              >
-                {t('changeCity')} / {t('phone')}
-              </button>
             </div>
-          )}
+          </div>
         </div>
 
-        <div ref={recaptchaRef}></div>
-
         <button
-          onClick={confirmationResult ? handleVerifyOtp : handleSendOtp}
+          onClick={handleSubmit}
           disabled={loading}
           className="w-full py-4 bg-primary text-white rounded-2xl font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
         >
-          {loading ? t('loading') : (confirmationResult ? t('verify') : t('sendCode'))}
+          {loading ? t('loading') : t('complete')}
         </button>
       </motion.div>
     </div>
@@ -556,7 +484,7 @@ const AuthPage = () => {
         });
       }
     } catch (err: any) {
-      if (err.code === 'permission-denied' || err.message.includes('insufficient permissions')) {
+      if (err.code === 'permission-denied' || err.message?.includes('insufficient permissions')) {
         handleFirestoreError(err, OperationType.WRITE, 'users');
       } else if (err.code === 'auth/email-already-in-use') {
         setError(t('phoneAlreadyRegistered') || 'This phone number is already registered. Please log in.');
@@ -3113,8 +3041,8 @@ const AdminDashboard = () => {
       setPhone(editingWorker.phone);
       setHours(editingWorker.workingHours);
       setTransport(editingWorker.hasTransport);
-      setSpecialties(editingWorker.specialties);
-      setServiceArea(editingWorker.service_area);
+      setSpecialties(editingWorker.specialties || []);
+      setServiceArea(editingWorker.service_area || []);
       setDescription(editingWorker.description || '');
       setPhotoURL(editingWorker.photoURL || '');
       setPhotos(editingWorker.photos || []);
@@ -3527,12 +3455,12 @@ const AdminDashboard = () => {
                           type="button"
                           onClick={() => {
                             setSpecialties(prev => 
-                              prev.includes(p) ? prev.filter(s => s !== p) : [...prev, p]
+                              prev?.includes(p) ? prev.filter(s => s !== p) : [...(prev || []), p]
                             );
                           }}
                           className={cn(
                             "px-3 py-1 rounded-full text-xs font-bold transition-all",
-                            specialties.includes(p) ? "bg-primary text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-500"
+                            specialties?.includes(p) ? "bg-primary text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-500"
                           )}
                         >
                           {t(p)}
@@ -3550,12 +3478,12 @@ const AdminDashboard = () => {
                           type="button"
                           onClick={() => {
                             setServiceArea(prev => 
-                              prev.includes(c) ? prev.filter(s => s !== c) : [...prev, c]
+                              prev?.includes(c) ? prev.filter(s => s !== c) : [...(prev || []), c]
                             );
                           }}
                           className={cn(
                             "px-3 py-1 rounded-full text-xs font-bold transition-all",
-                            serviceArea.includes(c) ? "bg-primary text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-500"
+                            serviceArea?.includes(c) ? "bg-primary text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-500"
                           )}
                         >
                           {c}
@@ -4206,8 +4134,8 @@ const CategoryWorkersPage = () => {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const workersData = snapshot.docs.map(doc => doc.data() as WorkerProfile);
       const filtered = workersData.filter(w => {
-        const inCity = w.city === profile.city || (w.service_area && w.service_area.includes(profile.city));
-        const inCategory = w.profession === categoryId || (w.specialties && w.specialties.includes(categoryId));
+        const inCity = w.city === profile.city || (w.service_area && w.service_area?.includes(profile.city));
+        const inCategory = w.profession === categoryId || (w.specialties && w.specialties?.includes(categoryId));
         return inCity && inCategory;
       }).sort((a, b) => {
         // Available workers first
@@ -4652,7 +4580,7 @@ const AppContent = () => {
   useEffect(() => {
     // Seed mock data once if admin
     const adminEmails = ['mushtaqq.rh@gmail.com', 'iraqdinosaur680@gmail.com'];
-    if (isAuthReady && user && adminEmails.includes(user.email || '')) {
+    if (isAuthReady && user && adminEmails?.includes(user.email || '')) {
       const hasSeeded = localStorage.getItem('hasSeededMockData');
       if (!hasSeeded) {
         seedMockData().then(() => {
@@ -4665,7 +4593,7 @@ const AppContent = () => {
   useEffect(() => {
     // Force admin role if email matches
     const adminEmails = ['mushtaqq.rh@gmail.com', 'iraqdinosaur680@gmail.com'];
-    if (isAuthReady && user && adminEmails.includes(user.email || '') && profile && profile.role !== 'admin') {
+    if (isAuthReady && user && adminEmails?.includes(user.email || '') && profile && profile.role !== 'admin') {
       setDoc(doc(db, 'users', user.uid), { role: 'admin' }, { merge: true });
     }
   }, [isAuthReady, user, profile]);
