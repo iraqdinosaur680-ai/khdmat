@@ -9,16 +9,14 @@ import {
   Search, Filter, Star, Phone, Calendar, CheckCircle,
   AlertCircle, Info, Mail, Lock, UserPlus, LogIn,
   MapPin, Clock, Truck, ShieldCheck, Pin, Flag,
-  Plus, Trash2, Edit3, MessageCircle, FileText, Camera
+  Plus, Trash2, Edit3, MessageCircle, FileText, Camera, Grid, Image
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './AuthContext';
-import { auth, db, googleProvider } from './firebase';
+import { auth, db } from './firebase';
 import { 
-  signInWithPopup, 
   signOut, 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword,
-  sendEmailVerification,
   RecaptchaVerifier,
   linkWithPhoneNumber,
   PhoneAuthProvider,
@@ -30,7 +28,7 @@ import {
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { Capacitor } from '@capacitor/core';
 import { doc, setDoc, getDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp, getDocFromServer, deleteDoc, limit, updateDoc, writeBatch, getDocs, orderBy } from 'firebase/firestore';
-import { City, IRAQI_CITIES, UserProfile, WorkerProfile, Booking, Message, WorkerApplication, Review, Report, Ad } from './types';
+import { City, IRAQI_CITIES, UserProfile, WorkerProfile, Booking, Message, WorkerApplication, Review, Report, Ad, Category } from './types';
 import { cn } from './lib/utils';
 import './i18n';
 import { NotificationManager } from './components/NotificationManager';
@@ -493,7 +491,7 @@ const TermsOfServicePage = () => {
 
 const AuthPage = () => {
   const { t, i18n } = useTranslation();
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -503,93 +501,21 @@ const AuthPage = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleGoogleLogin = async () => {
-    setError('');
-    setLoading(true);
-    try {
-      let user;
-      if (Capacitor.isNativePlatform()) {
-        console.log("Starting native Google login...");
-        const result = await FirebaseAuthentication.signInWithGoogle();
-        console.log("Native Google login result:", result);
-        
-        if (!result.credential?.idToken) {
-          throw new Error("No ID token received from Google Sign-In.");
-        }
-        
-        const credential = GoogleAuthProvider.credential(result.credential.idToken);
-        const userCredential = await signInWithCredential(auth, credential);
-        user = userCredential.user;
-      } else {
-        const result = await signInWithPopup(auth, googleProvider);
-        user = result.user;
-      }
-
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      const isAdmin = user.email === 'tahatariq20069@gmail.com' || user.email === 'iraqdinosaur680@gmail.com' || user.email === 'kadmatiq@gmail.com';
-      
-      // Check if this user is assigned as a worker
-      const workersQuery = query(collection(db, 'workers'), where('email', '==', user.email));
-      const workerSnapshot = await getDocFromServer(doc(db, 'workers', 'placeholder')); // This is just to trigger a check, better use getDocs
-      // Actually, let's use getDocs
-      const { getDocs } = await import('firebase/firestore');
-      const workerDocs = await getDocs(workersQuery);
-      const isWorker = !workerDocs.empty;
-      const workerData = isWorker ? workerDocs.docs[0].data() as WorkerProfile : null;
-
-      if (!userDoc.exists()) {
-        const userData: any = {
-          uid: user.uid,
-          name: user.displayName || 'User',
-          email: user.email || '',
-          phone: '', // Will be completed in ProfileSetupPopup
-          photoURL: user.photoURL || '',
-          city: workerData?.city || '', 
-          role: isAdmin ? 'admin' : (isWorker ? 'worker' : 'user'),
-          createdAt: Date.now(),
-        };
-        if (isWorker && workerData?.uid) {
-          userData.workerId = workerData.uid;
-        }
-        await setDoc(doc(db, 'users', user.uid), userData);
-      } else {
-        const updates: any = {};
-        if (isAdmin && userDoc.data()?.role !== 'admin') updates.role = 'admin';
-        if (isWorker && userDoc.data()?.role !== 'worker') {
-          updates.role = 'worker';
-          updates.workerId = workerData?.uid;
-        }
-        if (Object.keys(updates).length > 0) {
-          await setDoc(doc(db, 'users', user.uid), updates, { merge: true });
-        }
-      }
-    } catch (err: any) {
-      console.error("Google Login Error:", err);
-      if (err.code === 'permission-denied' || err.message.includes('insufficient permissions')) {
-        handleFirestoreError(err, OperationType.WRITE, 'users');
-      }
-      if (err.code === 'auth/operation-not-allowed') {
-        setError("This login method is not enabled in the Firebase Console. Please enable it under Authentication > Sign-in method.");
-      } else {
-        setError(`${err.message} ${err.code ? `(${err.code})` : ''}`);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
+      // Generate a deterministic email from the phone number for Firebase Auth
+      const authEmail = `${phone.replace(/\D/g, '')}@khdmat.app`;
+
       if (isLogin) {
-        const result = await signInWithEmailAndPassword(auth, email, password);
-        const isAdmin = email === 'tahatariq20069@gmail.com';
+        const result = await signInWithEmailAndPassword(auth, authEmail, password);
+        const isAdmin = authEmail === 'tahatariq20069@gmail.com' || authEmail === 'iraqdinosaur680@gmail.com' || authEmail === 'kadmatiq@gmail.com';
         
         const { getDocs } = await import('firebase/firestore');
-        const workersQuery = query(collection(db, 'workers'), where('email', '==', email));
+        const workersQuery = query(collection(db, 'workers'), where('phone', '==', phone));
         const workerDocs = await getDocs(workersQuery);
         const isWorker = !workerDocs.empty;
         const workerData = isWorker ? workerDocs.docs[0].data() as WorkerProfile : null;
@@ -606,14 +532,14 @@ const AuthPage = () => {
         }
       } else {
         if (password !== confirmPassword) {
-          throw new Error(t('passwordsDoNotMatch'));
+          throw new Error(t('passwordsDoNotMatch') || 'Passwords do not match');
         }
-        const result = await createUserWithEmailAndPassword(auth, email, password);
-        await sendEmailVerification(result.user);
-        const isAdmin = email === 'tahatariq20069@gmail.com';
+        const result = await createUserWithEmailAndPassword(auth, authEmail, password);
+        
+        const isAdmin = authEmail === 'tahatariq20069@gmail.com' || authEmail === 'iraqdinosaur680@gmail.com' || authEmail === 'kadmatiq@gmail.com';
         
         const { getDocs } = await import('firebase/firestore');
-        const workersQuery = query(collection(db, 'workers'), where('email', '==', email));
+        const workersQuery = query(collection(db, 'workers'), where('phone', '==', phone));
         const workerDocs = await getDocs(workersQuery);
         const isWorker = !workerDocs.empty;
         const workerData = isWorker ? workerDocs.docs[0].data() as WorkerProfile : null;
@@ -621,7 +547,7 @@ const AuthPage = () => {
         await setDoc(doc(db, 'users', result.user.uid), {
           uid: result.user.uid,
           name,
-          email,
+          email, // Optional email stored in profile
           phone,
           city: workerData?.city || '', 
           role: isAdmin ? 'admin' : (isWorker ? 'worker' : 'user'),
@@ -632,8 +558,9 @@ const AuthPage = () => {
     } catch (err: any) {
       if (err.code === 'permission-denied' || err.message.includes('insufficient permissions')) {
         handleFirestoreError(err, OperationType.WRITE, 'users');
-      }
-      if (err.code === 'auth/operation-not-allowed') {
+      } else if (err.code === 'auth/email-already-in-use') {
+        setError(t('phoneAlreadyRegistered') || 'This phone number is already registered. Please log in.');
+      } else if (err.code === 'auth/operation-not-allowed') {
         setError("Email/Password login is not enabled in the Firebase Console. Please enable it under Authentication > Sign-in method.");
       } else {
         setError(err.message);
@@ -664,50 +591,50 @@ const AuthPage = () => {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isLogin && (
-            <>
-              <div>
-                <label className="block text-sm font-medium mb-1">{t('name')}</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-primary outline-none"
-                  />
-                </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">{t('name')}</label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-primary outline-none"
+                />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">{t('phone')}</label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                  <input
-                    type="tel"
-                    required
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="07XXXXXXXX"
-                    className="w-full pl-10 pr-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-primary outline-none"
-                  />
-                </div>
-              </div>
-            </>
+            </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium mb-1">{t('email')}</label>
+            <label className="block text-sm font-medium mb-1">{t('phone')}</label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input
-                type="email"
+                type="tel"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="07XXXXXXXX"
                 className="w-full pl-10 pr-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-primary outline-none"
               />
             </div>
           </div>
+
+          {!isLogin && (
+            <div>
+              <label className="block text-sm font-medium mb-1">{t('email')} ({t('optional')})</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-primary outline-none"
+                />
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium mb-1">{t('password')}</label>
@@ -748,21 +675,6 @@ const AuthPage = () => {
             {isLogin ? t('login') : t('register')}
           </button>
         </form>
-
-        <div className="mt-6">
-          <div className="relative mb-6">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-300 dark:border-gray-600"></div></div>
-            <div className="relative flex justify-center text-sm"><span className="px-2 bg-white dark:bg-gray-800 text-gray-500">Or continue with</span></div>
-          </div>
-
-          <button
-            onClick={handleGoogleLogin}
-            className="w-full py-2 border border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
-          >
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
-            Google
-          </button>
-        </div>
 
         <p className="mt-8 text-center text-sm text-gray-500 dark:text-gray-400">
           {isLogin ? "Don't have an account?" : "Already have an account?"}{' '}
@@ -807,8 +719,20 @@ const Header = ({ darkMode, setDarkMode }: { darkMode: boolean, setDarkMode: (v:
     }
   }, [profile]);
 
-  const toggleLanguage = () => {
-    i18n.changeLanguage(i18n.language === 'ar' ? 'en' : 'ar');
+  const toggleLanguage = async () => {
+    const langs = ['ar', 'en', 'ku'];
+    const currentIndex = langs.indexOf(i18n.language);
+    const nextIndex = (currentIndex + 1) % langs.length;
+    const newLang = langs[nextIndex];
+    i18n.changeLanguage(newLang);
+    
+    if (profile?.uid) {
+      try {
+        await setDoc(doc(db, 'users', profile.uid), { language: newLang }, { merge: true });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, `users/${profile.uid}`);
+      }
+    }
   };
 
   return (
@@ -889,7 +813,7 @@ const Header = ({ darkMode, setDarkMode }: { darkMode: boolean, setDarkMode: (v:
                     onClick={toggleLanguage}
                     className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm font-bold"
                   >
-                    {i18n.language === 'ar' ? 'English' : 'العربية'}
+                    {i18n.language === 'ar' ? 'العربية' : i18n.language === 'en' ? 'English' : 'كوردى'}
                   </button>
                 </div>
 
@@ -1020,32 +944,13 @@ const HomePage = () => {
   const { profile } = useAuth();
   const settings = useSettings();
   const navigate = useNavigate();
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [workers, setWorkers] = useState<WorkerProfile[]>([]);
-  const [loading, setLoading] = useState(true);
   const [myRequests, setMyRequests] = useState<Booking[]>([]);
   const [recentChats, setRecentChats] = useState<Booking[]>([]);
   const [confirmData, setConfirmData] = useState<{ isOpen: boolean; bookingId: string } | null>(null);
   const [alertData, setAlertData] = useState<{ isOpen: boolean; title: string; message: string; type: 'info' | 'success' | 'error' } | null>(null);
   const [profilesCache, setProfilesCache] = useState<Record<string, { name: string; photoURL?: string }>>({});
   const [ads, setAds] = useState<Ad[]>([]);
-
-  const categories = [
-    { id: 'plumbing', icon: '💧', label: t('plumbing') },
-    { id: 'acFixing', icon: '❄️', label: t('acFixing') },
-    { id: 'electrical', icon: '⚡', label: t('electrical') },
-    { id: 'cleaning', icon: '🧹', label: t('cleaning') },
-    { id: 'gardening', icon: '🌳', label: t('gardening') },
-    { id: 'carpentry', icon: '🔨', label: t('carpentry') },
-    { id: 'painting', icon: '🎨', label: t('painting') },
-    { id: 'applianceRepair', icon: '🛠️', label: t('applianceRepair') },
-    { id: 'pestControl', icon: '🐜', label: t('pestControl') },
-    { id: 'locksmith', icon: '🔑', label: t('locksmith') },
-    { id: 'movingDelivery', icon: '📦', label: t('movingDelivery') },
-    { id: 'decoration', icon: '🖼️', label: t('decoration') },
-    { id: 'securityCameras', icon: '📹', label: t('securityCameras') },
-    { id: 'internet', icon: '🌐', label: t('internet') },
-  ];
+  const [categories, setCategories] = useState<Category[]>([]);
 
   useEffect(() => {
     if (!profile) return;
@@ -1059,37 +964,35 @@ const HomePage = () => {
   }, [profile]);
 
   useEffect(() => {
-    if (!profile?.city) {
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    const q = query(collection(db, 'workers'));
-
+    const q = query(collection(db, 'categories'), where('active', '==', true), orderBy('order', 'asc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const workersData = snapshot.docs.map(doc => doc.data() as WorkerProfile);
-      const filtered = workersData.filter(w => {
-        const inCity = w.city === profile.city || (w.service_area && w.service_area.includes(profile.city));
-        const inCategory = !selectedCategory || w.profession === selectedCategory || (w.specialties && w.specialties.includes(selectedCategory));
-        return inCity && inCategory;
-      }).sort((a, b) => {
-        // Available workers first
-        const availA = a.isAvailable !== false ? 1 : 0;
-        const availB = b.isAvailable !== false ? 1 : 0;
-        if (availA !== availB) return availB - availA;
-        // Then by rating
-        return b.rating - a.rating;
-      });
-      setWorkers(filtered);
-      setLoading(false);
+      if (snapshot.empty) {
+        // Fallback to default categories if none exist in Firestore
+        const defaultCategories: Category[] = [
+          { id: 'plumbing', icon: '💧', nameEn: 'Plumbing', nameAr: 'سباكة', nameKu: 'بۆری ئاو', order: 1, active: true },
+          { id: 'acFixing', icon: '❄️', nameEn: 'AC Fixing', nameAr: 'تصليح مكيفات', nameKu: 'چاککردنەوەی سپلیت', order: 2, active: true },
+          { id: 'electrical', icon: '⚡', nameEn: 'Electrical', nameAr: 'كهرباء', nameKu: 'کارەبا', order: 3, active: true },
+          { id: 'cleaning', icon: '🧹', nameEn: 'Cleaning', nameAr: 'تنظيف', nameKu: 'پاککردنەوە', order: 4, active: true },
+          { id: 'gardening', icon: '🌳', nameEn: 'Gardening', nameAr: 'حدائق', nameKu: 'باخچە', order: 5, active: true },
+          { id: 'carpentry', icon: '🔨', nameEn: 'Carpentry', nameAr: 'نجارة', nameKu: 'دارتاشی', order: 6, active: true },
+          { id: 'painting', icon: '🎨', nameEn: 'Painting', nameAr: 'صباغة', nameKu: 'بۆیاخکردن', order: 7, active: true },
+          { id: 'applianceRepair', icon: '🛠️', nameEn: 'Appliance Repair', nameAr: 'تصليح أجهزة', nameKu: 'چاککردنەوەی ئامێر', order: 8, active: true },
+          { id: 'pestControl', icon: '🐜', nameEn: 'Pest Control', nameAr: 'مكافحة حشرات', nameKu: 'قڕکردنی مێروو', order: 9, active: true },
+          { id: 'locksmith', icon: '🔑', nameEn: 'Locksmith', nameAr: 'أقفال', nameKu: 'قوفڵ', order: 10, active: true },
+          { id: 'movingDelivery', icon: '📦', nameEn: 'Moving & Delivery', nameAr: 'نقل وتوصيل', nameKu: 'گواستنەوە', order: 11, active: true },
+          { id: 'decoration', icon: '🖼️', nameEn: 'Decoration', nameAr: 'ديكور', nameKu: 'دیکۆر', order: 12, active: true },
+          { id: 'securityCameras', icon: '📹', nameEn: 'Security Cameras', nameAr: 'كاميرات مراقبة', nameKu: 'کامێرای چاودێری', order: 13, active: true },
+          { id: 'internet', icon: '🌐', nameEn: 'Internet', nameAr: 'انترنت', nameKu: 'ئەنتەرنێت', order: 14, active: true },
+        ];
+        setCategories(defaultCategories);
+      } else {
+        setCategories(snapshot.docs.map(doc => doc.data() as Category));
+      }
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'workers');
-      setLoading(false);
+      console.error("Error fetching categories:", error);
     });
-
     return () => unsubscribe();
-  }, [profile?.city, selectedCategory]);
+  }, []);
 
   useEffect(() => {
     if (profile?.role === 'worker' && (profile as any).workerId) {
@@ -1229,40 +1132,24 @@ const HomePage = () => {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-black tracking-tight">{t('categories')}</h2>
-          {selectedCategory && (
-            <button 
-              onClick={() => setSelectedCategory(null)}
-              className="text-[10px] font-bold text-primary hover:underline"
-            >
-              {t('cancel').toUpperCase()}
-            </button>
-          )}
         </div>
         <div className="grid grid-cols-4 gap-3">
           {categories.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => setSelectedCategory(selectedCategory === cat.id ? null : cat.id)}
-              className={cn(
-                "flex flex-col items-center p-2 rounded-2xl transition-all border-2 aspect-square justify-center",
-                selectedCategory === cat.id 
-                  ? "bg-primary border-primary text-white shadow-lg scale-105 z-10" 
-                  : "bg-white dark:bg-gray-800 border-transparent shadow-sm hover:border-primary/30 active:scale-95"
-              )}
+              onClick={() => navigate(`/category/${cat.id}`)}
+              className="flex flex-col items-center p-2 rounded-2xl transition-all border-2 aspect-square justify-center bg-white dark:bg-gray-800 border-transparent shadow-sm hover:border-primary/30 active:scale-95"
             >
               <span className="text-2xl mb-1">{cat.icon}</span>
-              <span className={cn(
-                "text-[9px] font-black text-center leading-tight line-clamp-2 px-1",
-                selectedCategory === cat.id ? "text-white" : "text-gray-700 dark:text-gray-300"
-              )}>
-                {cat.label.toUpperCase()}
+              <span className="text-[9px] font-black text-center leading-tight line-clamp-2 px-1 text-gray-700 dark:text-gray-300">
+                {(i18n.language === 'ar' ? cat.nameAr : i18n.language === 'ku' ? cat.nameKu : cat.nameEn).toUpperCase()}
               </span>
             </button>
           ))}
         </div>
       </div>
 
-      {recentChats.length > 0 && !selectedCategory && (
+      {recentChats.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-black tracking-tight mb-4 flex items-center gap-2">
             <MessageSquare className="text-primary" size={20} />
@@ -1306,7 +1193,7 @@ const HomePage = () => {
         </div>
       )}
 
-      {profile?.role === 'worker' && myRequests.length > 0 && !selectedCategory && (
+      {profile?.role === 'worker' && myRequests.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-black tracking-tight mb-4 flex items-center gap-2">
             <Briefcase className="text-primary" size={20} />
@@ -1335,6 +1222,15 @@ const HomePage = () => {
                   </div>
                 </div>
                 <p className="text-xs font-bold line-clamp-1 mb-2">{req.description}</p>
+                <div className="mb-3">
+                  <input 
+                    type="text"
+                    id={`home-time-${req.id}`}
+                    placeholder={t('enterScheduledTime')}
+                    className="w-full text-[10px] p-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 focus:ring-1 focus:ring-primary outline-none"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
                 <div className="flex justify-between items-center mt-4">
                   <div className="flex gap-2">
                     <button 
@@ -1370,107 +1266,6 @@ const HomePage = () => {
           </div>
         </div>
       )}
-
-      <div>
-        <h2 className="text-lg font-black tracking-tight mb-4 flex items-center justify-between">
-          {selectedCategory ? t(selectedCategory) : t('workers')}
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{workers.length} {t('workers').toLowerCase()}</span>
-        </h2>
-        
-        {loading ? (
-          <div className="flex justify-center py-12"><LoadingScreen inline /></div>
-        ) : workers.length > 0 ? (
-          <div className="grid gap-4">
-            {workers.map((worker) => (
-              <motion.div 
-                key={worker.uid}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className={cn(
-                  "bg-white dark:bg-gray-800 rounded-2xl shadow-md p-4 flex gap-4 border border-gray-100 dark:border-gray-700 transition-all",
-                  worker.isAvailable === false && "opacity-60 grayscale-[0.5]"
-                )}
-              >
-                <div 
-                  className="relative cursor-pointer"
-                  onClick={() => navigate(`/worker/${worker.uid}`)}
-                >
-                  {worker.photoURL ? (
-                    <img src={worker.photoURL} alt={worker.name} className="w-20 h-20 rounded-xl object-cover" referrerPolicy="no-referrer" />
-                  ) : (
-                    <div className="w-20 h-20 rounded-xl bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-2xl">👤</div>
-                  )}
-                  {worker.isAvailable === false && (
-                    <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center">
-                      <span className="text-[10px] font-bold text-white uppercase tracking-wider">{t('unavailable')}</span>
-                    </div>
-                  )}
-                  {worker.email && !worker.email.endsWith('@khdmat.iq') && (
-                    <div className="absolute -top-2 -left-2 bg-blue-500 text-white p-1 rounded-full shadow-lg border-2 border-white dark:border-gray-800">
-                      <Mail size={12} />
-                    </div>
-                  )}
-                  <div className="absolute -bottom-2 -right-2 bg-yellow-400 text-white px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-sm">
-                    <Star size={10} fill="white" /> {worker.rating}
-                  </div>
-                </div>
-
-                <div className="flex-1">
-                  <h3 
-                    className="font-bold text-lg cursor-pointer hover:text-primary transition-colors"
-                    onClick={() => navigate(`/worker/${worker.uid}`)}
-                  >
-                    {worker.name}
-                  </h3>
-                  <p className="text-primary text-sm font-medium mb-1">{t(worker.profession)}</p>
-                  
-                  {worker.specialties && worker.specialties.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-2">
-                      {worker.specialties.map(s => (
-                        <span key={s} className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-[8px] font-bold uppercase">
-                          {t(s)}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  
-                  <div className="grid grid-cols-2 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
-                    <div className="flex items-center gap-1"><Clock size={12} /> {worker.workingHours}</div>
-                    <div className="flex items-center gap-1"><Truck size={12} /> {worker.hasTransport ? t('available') : t('unavailable')}</div>
-                  </div>
-
-                  {worker.service_area && worker.service_area.length > 1 && (
-                    <div className="mt-2 flex flex-wrap gap-1 items-center">
-                      <MapPin size={10} className="text-gray-400" />
-                      <div className="flex flex-wrap gap-x-1">
-                        {worker.service_area.map((c, idx) => (
-                          <span key={c} className="text-[9px] text-gray-400">
-                            {c}{idx < worker.service_area.length - 1 ? ',' : ''}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="mt-4 flex gap-2">
-                    <button 
-                      onClick={() => navigate(`/book/${worker.uid}`)}
-                      className="flex-1 py-2 bg-primary text-white rounded-lg flex items-center justify-center gap-2 text-sm font-bold hover:bg-opacity-90 transition-all shadow-md"
-                    >
-                      <Calendar size={16} /> {t('book')}
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12 bg-gray-50 dark:bg-gray-800/50 rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-700">
-            <Search size={48} className="mx-auto text-gray-300 mb-4" />
-            <p className="text-gray-500 dark:text-gray-400">{t('noWorkers')}</p>
-          </div>
-        )}
-      </div>
 
       <ConfirmDialog 
         isOpen={!!confirmData?.isOpen}
@@ -2513,35 +2308,39 @@ const ProfilePage = () => {
                     </button>
                   )}
                   {profile?.role === 'worker' && booking.status === 'pending' && (
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col gap-2 w-full">
                       <input 
-                        type="datetime-local"
-                        className="text-xs p-1 border rounded dark:bg-gray-700 dark:border-gray-600"
+                        type="text"
+                        className="text-xs p-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 focus:ring-1 focus:ring-primary outline-none"
                         id={`time-${booking.id}`}
+                        placeholder={t('enterScheduledTime')}
+                        onClick={(e) => e.stopPropagation()}
                       />
-                      <button 
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          const timeInput = document.getElementById(`time-${booking.id}`) as HTMLInputElement;
-                          if (!timeInput.value) return;
-                          await updateDoc(doc(db, 'bookings', booking.id), {
-                            status: 'confirmed',
-                            scheduledTime: timeInput.value
-                          });
-                        }}
-                        className="px-3 py-1 bg-green-500 text-white text-xs rounded-lg font-bold"
-                      >
-                        {t('accept')}
-                      </button>
-                      <button 
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          setConfirmData({ isOpen: true, bookingId: booking.id });
-                        }}
-                        className="px-3 py-1 bg-red-500 text-white text-xs rounded-lg font-bold"
-                      >
-                        {t('deny')}
-                      </button>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const timeInput = document.getElementById(`time-${booking.id}`) as HTMLInputElement;
+                            if (!timeInput.value) return;
+                            await updateDoc(doc(db, 'bookings', booking.id), {
+                              status: 'confirmed',
+                              scheduledTime: timeInput.value
+                            });
+                          }}
+                          className="flex-1 py-1.5 bg-green-500 text-white text-xs rounded-lg font-bold shadow-sm"
+                        >
+                          {t('accept')}
+                        </button>
+                        <button 
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            setConfirmData({ isOpen: true, bookingId: booking.id });
+                          }}
+                          className="flex-1 py-1.5 bg-red-500 text-white text-xs rounded-lg font-bold shadow-sm"
+                        >
+                          {t('deny')}
+                        </button>
+                      </div>
                     </div>
                   )}
                   {profile?.role === 'worker' && booking.status === 'confirmed' && (
@@ -2689,7 +2488,7 @@ const WorkerApplicationPage = () => {
       const appData: WorkerApplication = {
         uid: profile.uid,
         phone,
-        email: profile.email,
+        email: profile.email || '',
         nationalId,
         status: 'pending',
         timestamp: Date.now()
@@ -2987,14 +2786,26 @@ const AdminDashboard = () => {
   const [workers, setWorkers] = useState<WorkerProfile[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [editingWorker, setEditingWorker] = useState<WorkerProfile | null>(null);
-  const [confirmData, setConfirmData] = useState<{ isOpen: boolean; id: string; type: 'worker' | 'ad' } | null>(null);
+  const [confirmData, setConfirmData] = useState<{ isOpen: boolean; id: string; type: 'worker' | 'ad' | 'category' } | null>(null);
   const [alertData, setAlertData] = useState<{ isOpen: boolean; title: string; message: string; type: 'info' | 'success' | 'error' } | null>(null);
-  const [activeTab, setActiveTab] = useState<'workers' | 'users' | 'reports' | 'applications' | 'settings' | 'ads'>('workers');
+  const [activeTab, setActiveTab] = useState<'workers' | 'users' | 'reports' | 'applications' | 'settings' | 'ads' | 'categories'>('workers');
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [applications, setApplications] = useState<WorkerApplication[]>([]);
   const [ads, setAds] = useState<Ad[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const appSettings = useSettings();
+
+  // Category form state
+  const [catId, setCatId] = useState('');
+  const [catIcon, setCatIcon] = useState('');
+  const [catNameEn, setCatNameEn] = useState('');
+  const [catNameAr, setCatNameAr] = useState('');
+  const [catNameKu, setCatNameKu] = useState('');
+  const [catOrder, setCatOrder] = useState(0);
+  const [catActive, setCatActive] = useState(true);
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
   // Ad form state
   const [adTitle, setAdTitle] = useState('');
@@ -3191,6 +3002,14 @@ const AdminDashboard = () => {
         handleFirestoreError(error, OperationType.LIST, 'ads');
       });
       return () => unsubscribe();
+    } else if (activeTab === 'categories') {
+      const q = query(collection(db, 'categories'), orderBy('order', 'asc'));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        setCategories(snapshot.docs.map(doc => doc.data() as Category));
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'categories');
+      });
+      return () => unsubscribe();
     }
   }, [activeTab]);
 
@@ -3210,6 +3029,31 @@ const AdminDashboard = () => {
     setIsAdding(false);
     setEditingWorker(null);
   };
+
+  const resetCategoryForm = () => {
+    setCatId('');
+    setCatIcon('');
+    setCatNameEn('');
+    setCatNameAr('');
+    setCatNameKu('');
+    setCatOrder(0);
+    setCatActive(true);
+    setIsAddingCategory(false);
+    setEditingCategory(null);
+  };
+
+  useEffect(() => {
+    if (editingCategory) {
+      setCatId(editingCategory.id);
+      setCatIcon(editingCategory.icon);
+      setCatNameEn(editingCategory.nameEn);
+      setCatNameAr(editingCategory.nameAr);
+      setCatNameKu(editingCategory.nameKu);
+      setCatOrder(editingCategory.order);
+      setCatActive(editingCategory.active);
+      setIsAddingCategory(true);
+    }
+  }, [editingCategory]);
 
   useEffect(() => {
     if (editingWorker) {
@@ -3274,6 +3118,61 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleSaveCategory = async () => {
+    try {
+      if (!catId || !catNameEn || !catNameAr || !catNameKu || !catIcon) {
+        setAlertData({ isOpen: true, title: t('error'), message: t('fillAllFields'), type: 'error' });
+        return;
+      }
+      
+      const categoryData: Category = {
+        id: catId,
+        icon: catIcon,
+        nameEn: catNameEn,
+        nameAr: catNameAr,
+        nameKu: catNameKu,
+        order: catOrder,
+        active: catActive
+      };
+
+      await setDoc(doc(db, 'categories', catId), categoryData);
+      resetCategoryForm();
+      setAlertData({ isOpen: true, title: t('success'), message: t('success'), type: 'success' });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `categories/${catId}`);
+    }
+  };
+
+  const handleSeedCategories = async () => {
+    try {
+      const defaultCategories: Category[] = [
+        { id: 'plumbing', icon: '💧', nameEn: 'Plumbing', nameAr: 'السباكة', nameKu: 'بۆری ئاو', order: 1, active: true },
+        { id: 'acFixing', icon: '❄️', nameEn: 'AC Fixing', nameAr: 'تصليح المكيفات', nameKu: 'چاککردنەوەی سپلیت', order: 2, active: true },
+        { id: 'electrical', icon: '⚡', nameEn: 'Electrical', nameAr: 'الكهرباء', nameKu: 'کارەبایی', order: 3, active: true },
+        { id: 'cleaning', icon: '🧹', nameEn: 'Cleaning', nameAr: 'التنظيف', nameKu: 'پاککردنەوە', order: 4, active: true },
+        { id: 'gardening', icon: '🌳', nameEn: 'Gardening', nameAr: 'البستنة', nameKu: 'باخچەوانی', order: 5, active: true },
+        { id: 'carpentry', icon: '🪚', nameEn: 'Carpentry', nameAr: 'النجارة', nameKu: 'دارتاشی', order: 6, active: true },
+        { id: 'painting', icon: '🎨', nameEn: 'Painting', nameAr: 'الطلاء', nameKu: 'بۆیاخکردن', order: 7, active: true },
+        { id: 'applianceRepair', icon: '🛠️', nameEn: 'Appliance Repair', nameAr: 'تصليح أجهزة', nameKu: 'چاککردنەوەی ئامێرەکان', order: 8, active: true },
+        { id: 'pestControl', icon: '🐜', nameEn: 'Pest Control', nameAr: 'مكافحة الحشرات', nameKu: 'قڕکردنی مێروو', order: 9, active: true },
+        { id: 'locksmith', icon: '🔑', nameEn: 'Locksmith', nameAr: 'حداد أقفال', nameKu: 'قوفڵساز', order: 10, active: true },
+        { id: 'movingDelivery', icon: '📦', nameEn: 'Moving & Delivery', nameAr: 'نقل وتوصيل', nameKu: 'گواستنەوە و گەیاندن', order: 11, active: true },
+        { id: 'decoration', icon: '🏠', nameEn: 'Decoration', nameAr: 'ديكور', nameKu: 'دیکۆر', order: 12, active: true },
+        { id: 'securityCameras', icon: '🛡️', nameEn: 'Security Cameras', nameAr: 'كاميرات مراقبة', nameKu: 'کامێرای چاودێری', order: 13, active: true },
+        { id: 'internet', icon: '🌐', nameEn: 'Internet & Wi-Fi', nameAr: 'إنترنت وواي فاي', nameKu: 'ئینتەرنێت و وای فای', order: 14, active: true },
+      ];
+
+      const batch = writeBatch(db);
+      for (const cat of defaultCategories) {
+        batch.set(doc(db, 'categories', cat.id), cat);
+      }
+      await batch.commit();
+      setAlertData({ isOpen: true, title: t('success'), message: t('success'), type: 'success' });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'categories');
+    }
+  };
+
   const handleRoleChange = async (uid: string, newRole: 'user' | 'worker' | 'admin') => {
     try {
       await updateDoc(doc(db, 'users', uid), { role: newRole });
@@ -3285,6 +3184,10 @@ const AdminDashboard = () => {
 
   const handleDelete = async (uid: string) => {
     setConfirmData({ isOpen: true, id: uid, type: 'worker' });
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    setConfirmData({ isOpen: true, id, type: 'category' });
   };
 
   const handleUpdateSettings = async () => {
@@ -3421,9 +3324,11 @@ const AdminDashboard = () => {
                 await deleteDoc(doc(db, 'users', confirmData.id));
               } else if (confirmData.type === 'ad') {
                 await deleteDoc(doc(db, 'ads', confirmData.id));
+              } else if (confirmData.type === 'category') {
+                await deleteDoc(doc(db, 'categories', confirmData.id));
               }
             } catch (error) {
-              handleFirestoreError(error, OperationType.DELETE, `${confirmData.type === 'worker' ? 'workers' : 'ads'}/${confirmData.id}`);
+              handleFirestoreError(error, OperationType.DELETE, `${confirmData.type === 'worker' ? 'workers' : confirmData.type === 'ad' ? 'ads' : 'categories'}/${confirmData.id}`);
             }
           }
           setConfirmData(null);
@@ -3449,13 +3354,21 @@ const AdminDashboard = () => {
             <Plus />
           </button>
         )}
+        {activeTab === 'categories' && (
+          <button 
+            onClick={() => setIsAddingCategory(true)}
+            className="p-2 bg-primary text-white rounded-full shadow-lg"
+          >
+            <Plus />
+          </button>
+        )}
       </div>
 
-      <div className="flex gap-2 mb-6 bg-gray-100 dark:bg-gray-900 p-1 rounded-2xl">
+      <div className="flex gap-2 mb-6 bg-gray-100 dark:bg-gray-900 p-1 rounded-2xl flex-wrap">
         <button 
           onClick={() => setActiveTab('workers')}
           className={cn(
-            "flex-1 py-2 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2",
+            "flex-1 py-2 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 min-w-[100px]",
             activeTab === 'workers' ? "bg-white dark:bg-gray-800 shadow-sm text-primary" : "text-gray-500"
           )}
         >
@@ -3464,7 +3377,7 @@ const AdminDashboard = () => {
         <button 
           onClick={() => setActiveTab('users')}
           className={cn(
-            "flex-1 py-2 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2",
+            "flex-1 py-2 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 min-w-[100px]",
             activeTab === 'users' ? "bg-white dark:bg-gray-800 shadow-sm text-primary" : "text-gray-500"
           )}
         >
@@ -3473,7 +3386,7 @@ const AdminDashboard = () => {
         <button 
           onClick={() => setActiveTab('reports')}
           className={cn(
-            "flex-1 py-2 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2",
+            "flex-1 py-2 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 min-w-[100px]",
             activeTab === 'reports' ? "bg-white dark:bg-gray-800 shadow-sm text-primary" : "text-gray-500"
           )}
         >
@@ -3482,29 +3395,38 @@ const AdminDashboard = () => {
         <button 
           onClick={() => setActiveTab('applications')}
           className={cn(
-            "flex-1 py-2 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2",
+            "flex-1 py-2 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 min-w-[100px]",
             activeTab === 'applications' ? "bg-white dark:bg-gray-800 shadow-sm text-primary" : "text-gray-500"
           )}
         >
           <FileText size={16} /> {t('applications')}
         </button>
         <button 
-          onClick={() => setActiveTab('ads')}
-          className={cn(
-            "flex-1 py-2 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2",
-            activeTab === 'ads' ? "bg-white dark:bg-gray-800 shadow-sm text-primary" : "text-gray-500"
-          )}
-        >
-          <Pin size={16} /> {t('ads')}
-        </button>
-        <button 
           onClick={() => setActiveTab('settings')}
           className={cn(
-            "flex-1 py-2 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2",
+            "flex-1 py-2 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 min-w-[100px]",
             activeTab === 'settings' ? "bg-white dark:bg-gray-800 shadow-sm text-primary" : "text-gray-500"
           )}
         >
           <Settings size={16} /> {t('settings')}
+        </button>
+        <button 
+          onClick={() => setActiveTab('ads')}
+          className={cn(
+            "flex-1 py-2 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 min-w-[100px]",
+            activeTab === 'ads' ? "bg-white dark:bg-gray-800 shadow-sm text-primary" : "text-gray-500"
+          )}
+        >
+          <Image size={16} /> {t('ads')}
+        </button>
+        <button 
+          onClick={() => setActiveTab('categories')}
+          className={cn(
+            "flex-1 py-2 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 min-w-[100px]",
+            activeTab === 'categories' ? "bg-white dark:bg-gray-800 shadow-sm text-primary" : "text-gray-500"
+          )}
+        >
+          <Grid size={16} /> {t('categories')}
         </button>
       </div>
 
@@ -3967,6 +3889,110 @@ const AdminDashboard = () => {
             )}
           </div>
         </div>
+      ) : activeTab === 'categories' ? (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-bold">{t('manageCategories')}</h3>
+            <button 
+              onClick={() => setIsAddingCategory(true)}
+              className="px-4 py-2 bg-primary text-white rounded-xl font-bold text-sm flex items-center gap-2"
+            >
+              <Plus size={16} /> {t('addCategory')}
+            </button>
+          </div>
+
+          <AnimatePresence>
+            {(isAddingCategory || editingCategory) && (
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-xl mb-8 border border-primary/20"
+              >
+                <h3 className="text-xl font-bold mb-4">{editingCategory ? t('editCategory') : t('addCategory')}</h3>
+                <div className="grid gap-4">
+                  <input value={catId} onChange={e => setCatId(e.target.value)} placeholder="ID (e.g., plumbing)" className="p-2 border rounded-lg dark:bg-gray-700" disabled={!!editingCategory} />
+                  <input value={catIcon} onChange={e => setCatIcon(e.target.value)} placeholder="Emoji Icon (e.g., 💧)" className="p-2 border rounded-lg dark:bg-gray-700" />
+                  <input value={catNameEn} onChange={e => setCatNameEn(e.target.value)} placeholder="English Name" className="p-2 border rounded-lg dark:bg-gray-700" />
+                  <input value={catNameAr} onChange={e => setCatNameAr(e.target.value)} placeholder="Arabic Name" className="p-2 border rounded-lg dark:bg-gray-700" dir="rtl" />
+                  <input value={catNameKu} onChange={e => setCatNameKu(e.target.value)} placeholder="Kurdish Name" className="p-2 border rounded-lg dark:bg-gray-700" dir="rtl" />
+                  <input type="number" value={catOrder} onChange={e => setCatOrder(Number(e.target.value))} placeholder="Order" className="p-2 border rounded-lg dark:bg-gray-700" />
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={catActive} onChange={e => setCatActive(e.target.checked)} className="rounded text-primary focus:ring-primary" />
+                    <span className="text-sm font-bold">{t('active')}</span>
+                  </label>
+                  
+                  <div className="flex gap-2 pt-4">
+                    <button onClick={handleSaveCategory} className="flex-1 py-3 bg-primary text-white rounded-xl font-bold shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all">
+                      {t('save')}
+                    </button>
+                    <button onClick={resetCategoryForm} className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition-all">
+                      {t('cancel')}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="grid gap-4">
+            {categories.length === 0 ? (
+              <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                <Grid size={48} className="mx-auto text-gray-300 mb-4" />
+                <p className="text-gray-500 mb-6">{t('noCategories')}</p>
+                <button 
+                  onClick={handleSeedCategories}
+                  className="px-6 py-3 bg-primary/10 text-primary rounded-xl font-bold hover:bg-primary/20 transition-all flex items-center gap-2 mx-auto"
+                >
+                  <Plus size={20} /> {t('seedCategories')}
+                </button>
+              </div>
+            ) : (
+              categories.map(cat => (
+                <div key={cat.id} className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-md flex gap-4 items-center">
+                  <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-xl flex items-center justify-center text-2xl">
+                    {cat.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h5 className="font-bold truncate">{cat.nameEn} / {cat.nameAr} / {cat.nameKu}</h5>
+                      {!cat.active && (
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-500 text-[10px] rounded-full font-bold uppercase">
+                          {t('unavailable')}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 line-clamp-1">ID: {cat.id} | Order: {cat.order}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => {
+                        setEditingCategory(cat);
+                        setCatId(cat.id);
+                        setCatIcon(cat.icon);
+                        setCatNameEn(cat.nameEn);
+                        setCatNameAr(cat.nameAr);
+                        setCatNameKu(cat.nameKu);
+                        setCatOrder(cat.order);
+                        setCatActive(cat.active);
+                        setIsAddingCategory(true);
+                      }}
+                      className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      <Edit3 size={18} />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteCategory(cat.id)}
+                      className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       ) : (
         <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-md space-y-6">
           <h3 className="text-xl font-bold mb-4">{t('settings')}</h3>
@@ -4079,6 +4105,174 @@ const AdminDashboard = () => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+const CategoryWorkersPage = () => {
+  const { t, i18n } = useTranslation();
+  const { categoryId } = useParams();
+  const { profile } = useAuth();
+  const navigate = useNavigate();
+  const [workers, setWorkers] = useState<WorkerProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [category, setCategory] = useState<Category | null>(null);
+
+  useEffect(() => {
+    if (!categoryId) return;
+    const unsubscribe = onSnapshot(doc(db, 'categories', categoryId), (docSnap) => {
+      if (docSnap.exists()) {
+        setCategory(docSnap.data() as Category);
+      }
+    });
+    return () => unsubscribe();
+  }, [categoryId]);
+
+  useEffect(() => {
+    if (!profile?.city || !categoryId) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const q = query(collection(db, 'workers'));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const workersData = snapshot.docs.map(doc => doc.data() as WorkerProfile);
+      const filtered = workersData.filter(w => {
+        const inCity = w.city === profile.city || (w.service_area && w.service_area.includes(profile.city));
+        const inCategory = w.profession === categoryId || (w.specialties && w.specialties.includes(categoryId));
+        return inCity && inCategory;
+      }).sort((a, b) => {
+        // Available workers first
+        const availA = a.isAvailable !== false ? 1 : 0;
+        const availB = b.isAvailable !== false ? 1 : 0;
+        if (availA !== availB) return availB - availA;
+        // Then by rating
+        return b.rating - a.rating;
+      });
+      setWorkers(filtered);
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'workers');
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [profile?.city, categoryId]);
+
+  const getCategoryName = () => {
+    if (!category) return categoryId ? t(categoryId) : t('workers');
+    return i18n.language === 'ar' ? category.nameAr : i18n.language === 'ku' ? category.nameKu : category.nameEn;
+  };
+
+  return (
+    <div className="pb-20 p-4 bg-gray-50 dark:bg-gray-950 min-h-screen">
+      <div className="flex items-center gap-3 mb-6">
+        <button onClick={() => navigate(-1)} className="p-2 bg-white dark:bg-gray-800 rounded-full shadow-sm">
+          <ChevronLeft size={24} />
+        </button>
+        <h2 className="text-2xl font-black tracking-tight text-primary">
+          {category?.icon} {getCategoryName()}
+        </h2>
+      </div>
+
+      <div>
+        <h2 className="text-lg font-black tracking-tight mb-4 flex items-center justify-between">
+          {t('workers')}
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{workers.length} {t('workers').toLowerCase()}</span>
+        </h2>
+        
+        {loading ? (
+          <div className="flex justify-center py-12"><LoadingScreen inline /></div>
+        ) : workers.length > 0 ? (
+          <div className="grid gap-4">
+            {workers.map((worker) => (
+              <motion.div 
+                key={worker.uid}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className={cn(
+                  "bg-white dark:bg-gray-800 rounded-2xl shadow-md p-4 flex gap-4 border border-gray-100 dark:border-gray-700 transition-all",
+                  worker.isAvailable === false && "opacity-60 grayscale-[0.5]"
+                )}
+              >
+                <div 
+                  className="relative cursor-pointer"
+                  onClick={() => navigate(`/worker/${worker.uid}`)}
+                >
+                  {worker.photoURL ? (
+                    <img src={worker.photoURL} alt={worker.name} className="w-20 h-20 rounded-xl object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <div className="w-20 h-20 rounded-xl bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-2xl">👤</div>
+                  )}
+                  {worker.isAvailable === false && (
+                    <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center">
+                      <span className="text-[10px] font-bold text-white uppercase tracking-wider">{t('unavailable')}</span>
+                    </div>
+                  )}
+                  {worker.email && !worker.email.endsWith('@khdmat.iq') && (
+                    <div className="absolute -top-2 -left-2 bg-blue-500 text-white p-1 rounded-full shadow-lg border-2 border-white dark:border-gray-800">
+                      <Mail size={12} />
+                    </div>
+                  )}
+                  <div className="absolute -bottom-2 -right-2 bg-yellow-400 text-white px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-sm">
+                    <Star size={10} fill="white" /> {worker.rating}
+                  </div>
+                </div>
+
+                <div className="flex-1">
+                  <h3 
+                    className="font-bold text-lg cursor-pointer hover:text-primary transition-colors"
+                    onClick={() => navigate(`/worker/${worker.uid}`)}
+                  >
+                    {worker.name}
+                  </h3>
+                  <p className="text-primary text-sm font-medium mb-1">{t(worker.profession)}</p>
+                  
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {worker.specialties?.slice(0, 2).map(s => (
+                      <span key={s} className="text-[9px] bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full font-bold text-gray-600 dark:text-gray-300">
+                        {t(s)}
+                      </span>
+                    ))}
+                    {worker.specialties && worker.specialties.length > 2 && (
+                      <span className="text-[9px] bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full font-bold text-gray-600 dark:text-gray-300">
+                        +{worker.specialties.length - 2}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between mt-auto">
+                    <div className="flex items-center gap-1 text-[10px] text-gray-500 font-bold">
+                      <MapPin size={10} /> {worker.city}
+                    </div>
+                    <button 
+                      onClick={() => navigate(`/book/${worker.uid}`)}
+                      disabled={worker.isAvailable === false}
+                      className={cn(
+                        "px-4 py-1.5 rounded-full text-[10px] font-black shadow-sm transition-all",
+                        worker.isAvailable !== false 
+                          ? "bg-primary text-white hover:scale-105 active:scale-95" 
+                          : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                      )}
+                    >
+                      {t('bookNow').toUpperCase()}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
+            <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Search className="text-gray-400" size={24} />
+            </div>
+            <p className="text-gray-500 font-medium">{t('noWorkersFound')}</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -4313,6 +4507,58 @@ const WorkerProfilePage = () => {
   );
 };
 
+const LanguageSelectionPopup = ({ onComplete }: { onComplete: (lang: string) => void }) => {
+  const { t, i18n } = useTranslation();
+  const [loading, setLoading] = useState(false);
+
+  const handleSelect = async (lang: string) => {
+    setLoading(true);
+    i18n.changeLanguage(lang);
+    await onComplete(lang);
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="bg-white dark:bg-gray-800 rounded-3xl p-8 w-full max-w-sm shadow-2xl text-center"
+      >
+        <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Globe className="text-primary" size={32} />
+        </div>
+        <h2 className="text-2xl font-bold mb-2">اختر اللغة / Select Language / زمان هەڵبژێرە</h2>
+        <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">Please select your preferred language</p>
+        
+        <div className="space-y-3">
+          <button
+            onClick={() => handleSelect('ar')}
+            disabled={loading}
+            className="w-full py-4 bg-gray-100 dark:bg-gray-700 hover:bg-primary hover:text-white dark:hover:bg-primary rounded-2xl font-bold transition-all"
+          >
+            العربية
+          </button>
+          <button
+            onClick={() => handleSelect('en')}
+            disabled={loading}
+            className="w-full py-4 bg-gray-100 dark:bg-gray-700 hover:bg-primary hover:text-white dark:hover:bg-primary rounded-2xl font-bold transition-all"
+          >
+            English
+          </button>
+          <button
+            onClick={() => handleSelect('ku')}
+            disabled={loading}
+            className="w-full py-4 bg-gray-100 dark:bg-gray-700 hover:bg-primary hover:text-white dark:hover:bg-primary rounded-2xl font-bold transition-all"
+          >
+            كوردى
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 const AppContent = () => {
   const { user, profile, loading, isAuthReady } = useAuth();
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true');
@@ -4323,15 +4569,15 @@ const AppContent = () => {
   const handleProfileSetup = async (city: City, phone: string) => {
     if (!user) return;
     try {
-      await setDoc(doc(db, 'users', user.uid), { 
-        city,
-        phone,
-        uid: user.uid,
-        name: user.displayName || 'User',
-        email: user.email || '',
-        role: 'user',
-        createdAt: Date.now()
-      }, { merge: true });
+      const updates: any = { city };
+      if (phone) updates.phone = phone;
+      
+      // Only set name if it doesn't exist in profile
+      if (!profile?.name) {
+        updates.name = user.displayName || 'User';
+      }
+      
+      await setDoc(doc(db, 'users', user.uid), updates, { merge: true });
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
     }
@@ -4365,8 +4611,23 @@ const AppContent = () => {
   }, [darkMode]);
 
   useEffect(() => {
-    document.dir = i18n.language === 'ar' ? 'rtl' : 'ltr';
+    document.dir = ['ar', 'ku'].includes(i18n.language) ? 'rtl' : 'ltr';
   }, [i18n.language]);
+
+  useEffect(() => {
+    if (profile?.language && profile.language !== i18n.language) {
+      i18n.changeLanguage(profile.language);
+    }
+  }, [profile?.language, i18n]);
+
+  const handleLanguageSetup = async (lang: string) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'users', user.uid), { language: lang }, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
+    }
+  };
 
   if (!isAuthReady || loading) return <LoadingScreen />;
   
@@ -4375,40 +4636,16 @@ const AppContent = () => {
   if (!user && !isPublicPage) return <AuthPage />;
 
   const showProfileSetup = !profile || !profile.city || !profile.phone;
-  const isEmailVerified = user?.emailVerified || user?.providerData.some(p => p.providerId === 'google.com');
-
-  const handleResendEmail = async () => {
-    if (user) {
-      try {
-        await sendEmailVerification(user);
-        alert(t('verificationEmailSent'));
-      } catch (e) {
-        console.error(e);
-      }
-    }
-  };
+  const showLanguageSetup = !showProfileSetup && profile && !profile.language;
 
   return (
     <div className="min-h-screen flex flex-col">
       <NotificationManager />
       {user && <Header darkMode={darkMode} setDarkMode={setDarkMode} />}
-      {!isEmailVerified && user && (
-        <div className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 px-4 py-2 text-xs text-center flex items-center justify-center gap-4">
-          <div className="flex items-center gap-2">
-            <AlertCircle size={14} />
-            <span>{t('emailNotVerified')}</span>
-          </div>
-          <button 
-            onClick={handleResendEmail}
-            className="font-bold underline hover:no-underline"
-          >
-            {t('resendVerificationEmail')}
-          </button>
-        </div>
-      )}
       <main className="flex-1 overflow-y-auto">
         <Routes>
           <Route path="/" element={<HomePage />} />
+          <Route path="/category/:categoryId" element={<CategoryWorkersPage />} />
           <Route path="/worker/:workerId" element={<WorkerProfilePage />} />
           <Route path="/book/:workerId" element={<BookingPage />} />
           <Route path="/help" element={<HelpPage />} />
@@ -4423,6 +4660,7 @@ const AppContent = () => {
       </main>
       {user && <BottomNav />}
       {showProfileSetup && <ProfileSetupPopup onComplete={handleProfileSetup} />}
+      {showLanguageSetup && <LanguageSelectionPopup onComplete={handleLanguageSetup} />}
     </div>
   );
 };

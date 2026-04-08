@@ -97,15 +97,16 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'name', 'email', 'city', 'role', 'createdAt']) &&
+      return data.keys().hasAll(['uid', 'name', 'city', 'role', 'createdAt']) &&
              data.uid is string &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             isValidEmail(data.email) &&
+             (!('email' in data) || data.email == '' || isValidEmail(data.email)) &&
              data.city is string &&
              data.role in ['user', 'worker', 'admin'] &&
              data.createdAt is number &&
              (!('phone' in data) || data.phone is string) &&
-             (!('workerId' in data) || data.workerId is string) &&
+             (!('language' in data) || data.language is string) &&
+             (!('workerId' in data) || data.workerId == null || data.workerId is string) &&
              (!('fcmToken' in data) || (data.fcmToken is string && data.fcmToken.size() < 500)) &&
              (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() < 1000000));
     }
@@ -138,6 +139,17 @@ service cloud.firestore {
              data.active is bool &&
              data.order is number &&
              data.createdAt is number;
+    }
+
+    function isValidCategory(data) {
+      return data.keys().hasAll(['id', 'icon', 'nameEn', 'nameAr', 'nameKu', 'order', 'active']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 50 &&
+             data.icon is string && data.icon.size() > 0 && data.icon.size() < 10 &&
+             data.nameEn is string && data.nameEn.size() > 0 && data.nameEn.size() < 50 &&
+             data.nameAr is string && data.nameAr.size() > 0 && data.nameAr.size() < 50 &&
+             data.nameKu is string && data.nameKu.size() > 0 && data.nameKu.size() < 50 &&
+             data.order is number &&
+             data.active is bool;
     }
 
     function isValidBooking(data) {
@@ -175,9 +187,9 @@ service cloud.firestore {
     }
 
     function isValidApplication(data) {
-      return data.keys().hasAll(['uid', 'phone', 'email', 'nationalId', 'status', 'timestamp']) &&
+      return data.keys().hasAll(['uid', 'phone', 'nationalId', 'status', 'timestamp']) &&
              data.uid == request.auth.uid &&
-             isValidEmail(data.email) &&
+             (!('email' in data) || data.email == '' || isValidEmail(data.email)) &&
              data.status == 'pending' &&
              data.timestamp is number;
     }
@@ -303,6 +315,12 @@ service cloud.firestore {
     match /ads/{adId} {
       allow read: if isAuthenticated();
       allow create, update: if isAdmin() && isValidAd(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /categories/{categoryId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() && isValidCategory(request.resource.data);
       allow delete: if isAdmin();
     }
   }

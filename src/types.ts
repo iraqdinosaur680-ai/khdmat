@@ -21,6 +21,7 @@ export interface UserProfile {
   role: 'user' | 'worker' | 'admin';
   createdAt: number;
   fcmToken?: string;
+  language?: string;
 }
 
 export interface WorkerProfile extends UserProfile {
@@ -128,4 +129,14 @@ export interface Ad {
   active: boolean;
   order: number;
   createdAt: number;
+}
+
+export interface Category {
+  id: string;
+  icon: string;
+  nameEn: string;
+  nameAr: string;
+  nameKu: string;
+  order: number;
+  active: boolean;
 }

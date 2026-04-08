@@ -1,7 +1,24 @@
 import { db } from './firebase';
-import { setDoc, doc } from 'firebase/firestore';
-import { WorkerProfile } from './types';
+import { setDoc, doc, getDocs, collection, writeBatch } from 'firebase/firestore';
+import { WorkerProfile, Category } from './types';
 import { handleFirestoreError, OperationType } from './lib/firestore-error-handler';
+
+const defaultCategories: Category[] = [
+  { id: 'plumbing', icon: '💧', nameEn: 'Plumbing', nameAr: 'السباكة', nameKu: 'بۆری ئاو', order: 1, active: true },
+  { id: 'acFixing', icon: '❄️', nameEn: 'AC Fixing', nameAr: 'تصليح المكيفات', nameKu: 'چاککردنەوەی سپلیت', order: 2, active: true },
+  { id: 'electrical', icon: '⚡', nameEn: 'Electrical', nameAr: 'الكهرباء', nameKu: 'کارەبایی', order: 3, active: true },
+  { id: 'cleaning', icon: '🧹', nameEn: 'Cleaning', nameAr: 'التنظيف', nameKu: 'پاککردنەوە', order: 4, active: true },
+  { id: 'gardening', icon: '🌳', nameEn: 'Gardening', nameAr: 'البستنة', nameKu: 'باخچەوانی', order: 5, active: true },
+  { id: 'carpentry', icon: '🪚', nameEn: 'Carpentry', nameAr: 'النجارة', nameKu: 'دارتاشی', order: 6, active: true },
+  { id: 'painting', icon: '🎨', nameEn: 'Painting', nameAr: 'الطلاء', nameKu: 'بۆیاخکردن', order: 7, active: true },
+  { id: 'applianceRepair', icon: '🛠️', nameEn: 'Appliance Repair', nameAr: 'تصليح أجهزة', nameKu: 'چاککردنەوەی ئامێرەکان', order: 8, active: true },
+  { id: 'pestControl', icon: '🐜', nameEn: 'Pest Control', nameAr: 'مكافحة الحشرات', nameKu: 'قڕکردنی مێروو', order: 9, active: true },
+  { id: 'locksmith', icon: '🔑', nameEn: 'Locksmith', nameAr: 'حداد أقفال', nameKu: 'قوفڵساز', order: 10, active: true },
+  { id: 'movingDelivery', icon: '📦', nameEn: 'Moving & Delivery', nameAr: 'نقل وتوصيل', nameKu: 'گواستنەوە و گەیاندن', order: 11, active: true },
+  { id: 'decoration', icon: '🏠', nameEn: 'Decoration', nameAr: 'ديكور', nameKu: 'دیکۆر', order: 12, active: true },
+  { id: 'securityCameras', icon: '🛡️', nameEn: 'Security Cameras', nameAr: 'كاميرات مراقبة', nameKu: 'کامێرای چاودێری', order: 13, active: true },
+  { id: 'internet', icon: '🌐', nameEn: 'Internet & Wi-Fi', nameAr: 'إنترنت وواي فاي', nameKu: 'ئینتەرنێت و وای فای', order: 14, active: true },
+];
 
 const mockWorkers: Partial<WorkerProfile>[] = [
   {
@@ -78,10 +95,20 @@ const mockWorkers: Partial<WorkerProfile>[] = [
 
 export const seedMockData = async () => {
   try {
+    const batch = writeBatch(db);
+
+    // Seed Categories if they don't exist
+    const catSnap = await getDocs(collection(db, 'categories'));
+    if (catSnap.empty) {
+      for (const cat of defaultCategories) {
+        batch.set(doc(db, 'categories', cat.id), cat);
+      }
+    }
+
     for (const worker of mockWorkers) {
-      await setDoc(doc(db, 'workers', worker.uid!), worker);
+      batch.set(doc(db, 'workers', worker.uid!), worker);
       // Also add to users collection for auth consistency
-      await setDoc(doc(db, 'users', worker.uid!), {
+      batch.set(doc(db, 'users', worker.uid!), {
         uid: worker.uid,
         name: worker.name,
         email: worker.email,
@@ -91,8 +118,10 @@ export const seedMockData = async () => {
         createdAt: worker.createdAt
       });
     }
+    
+    await batch.commit();
     console.log('Mock data seeded!');
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, 'workers/users');
+    handleFirestoreError(error, OperationType.WRITE, 'seed');
   }
 };

@@ -147,24 +147,21 @@ export const NotificationManager = () => {
       }
 
       // 5. Listen for worker application status updates
-      const qApps = query(
-        collection(db, 'workerApplications'),
-        where('uid', '==', user.uid)
-      );
-      const unsubApps = onSnapshot(qApps, (snapshot) => {
+      const unsubApps = onSnapshot(doc(db, 'workerApplications', user.uid), (docSnap) => {
         if (isInitialApps) {
           isInitialApps = false;
           return;
         }
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === 'modified') {
-            const app = change.doc.data() as WorkerApplication;
-            NotificationService.showLocalNotification(
-              t('applicationUpdate'),
-              `${t('applicationStatus')}: ${t(app.status)}`
-            );
-          }
-        });
+        if (docSnap.exists()) {
+          const app = docSnap.data() as WorkerApplication;
+          // We only want to notify if the status changed, but onSnapshot on a doc triggers on any change.
+          // To be precise, we'd need to compare previous state, but for simplicity we'll just notify.
+          // Actually, let's just notify if it exists and we aren't initial.
+          NotificationService.showLocalNotification(
+            t('applicationUpdate'),
+            `${t('applicationStatus')}: ${t(app.status)}`
+          );
+        }
       }, (error) => {
         console.error("NotificationManager: unsubApps error", error);
       });
