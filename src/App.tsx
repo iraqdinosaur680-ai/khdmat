@@ -285,41 +285,46 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
       const formattedPhone = formatPhoneNumber(phone);
 
       if (Capacitor.isNativePlatform()) {
-        // Use Native Capacitor Firebase Auth for better mobile compatibility
-        console.log("App: Starting native phone auth for", formattedPhone);
-        const result = await FirebaseAuthentication.signInWithPhoneNumber({
-          phoneNumber: formattedPhone,
-        }) as any;
-        
-        console.log("App: Native phone auth result:", result);
+        try {
+          console.log("App: Starting native phone auth for", formattedPhone);
+          const result = await FirebaseAuthentication.signInWithPhoneNumber({
+            phoneNumber: formattedPhone,
+          }) as any;
+          
+          console.log("App: Native phone auth result:", result);
 
-        if (!result || !result.verificationId) {
-          throw new Error("Failed to get verification ID from native auth plugin.");
-        }
-
-        const verificationId = result.verificationId;
-        
-        // Create a mock ConfirmationResult to maintain compatibility with the existing UI logic
-        setConfirmationResult({
-          confirm: async (code: string) => {
-            const credential = PhoneAuthProvider.credential(verificationId, code);
-            if (auth.currentUser) {
-              return await linkWithCredential(auth.currentUser, credential);
-            }
-            throw new Error("No user logged in");
+          if (result && result.verificationId) {
+            const verificationId = result.verificationId;
+            setConfirmationResult({
+              confirm: async (code: string) => {
+                const credential = PhoneAuthProvider.credential(verificationId, code);
+                if (auth.currentUser) {
+                  return await linkWithCredential(auth.currentUser, credential);
+                }
+                throw new Error("No user logged in");
+              }
+            } as any);
+            setLoading(false);
+            return; // Success with native flow
+          } else {
+            console.warn("App: Native auth returned no verificationId, falling back to web flow");
           }
-        } as any);
-      } else {
-        // Web flow
-        if (!recaptchaVerifier.current && recaptchaRef.current) {
-          recaptchaVerifier.current = new RecaptchaVerifier(auth, recaptchaRef.current, {
-            size: 'invisible',
-          });
+        } catch (nativeErr: any) {
+          console.error("App: Native phone auth failed, trying web fallback:", nativeErr);
+          // Don't throw yet, try web fallback
         }
-        
-        const result = await linkWithPhoneNumber(auth.currentUser, formattedPhone, recaptchaVerifier.current!);
-        setConfirmationResult(result);
       }
+
+      // Web flow (or fallback for native)
+      console.log("App: Using web-based phone auth flow");
+      if (!recaptchaVerifier.current && recaptchaRef.current) {
+        recaptchaVerifier.current = new RecaptchaVerifier(auth, recaptchaRef.current, {
+          size: 'invisible',
+        });
+      }
+      
+      const result = await linkWithPhoneNumber(auth.currentUser, formattedPhone, recaptchaVerifier.current!);
+      setConfirmationResult(result);
     } catch (err: any) {
       console.error("Phone Auth Error:", err);
       if (err.code === 'auth/credential-already-in-use') {
@@ -605,24 +610,30 @@ const AuthPage = () => {
     setLoading(true);
     try {
       if (Capacitor.isNativePlatform()) {
-        console.log("App: Starting native Google login");
-        const result = await FirebaseAuthentication.signInWithGoogle() as any;
-        console.log("App: Native Google login result:", result);
-        
-        if (!result) {
-          throw new Error("Failed to get result from native Google login.");
+        try {
+          console.log("App: Starting native Google login");
+          const result = await FirebaseAuthentication.signInWithGoogle() as any;
+          console.log("App: Native Google login result:", result);
+          
+          if (result) {
+            const idToken = result.authentication?.idToken || result.idToken;
+            if (idToken) {
+              const credential = GoogleAuthProvider.credential(idToken);
+              await signInWithCredential(auth, credential);
+              setLoading(false);
+              return; // Success with native flow
+            }
+          }
+          console.warn("App: Native Google login returned no token, falling back to web flow");
+        } catch (nativeErr: any) {
+          console.error("App: Native Google login failed, trying web fallback:", nativeErr);
+          // Fallback to web flow
         }
-
-        const idToken = result.authentication?.idToken || result.idToken;
-        if (!idToken) {
-          throw new Error("Failed to get ID token from native Google login.");
-        }
-
-        const credential = GoogleAuthProvider.credential(idToken);
-        await signInWithCredential(auth, credential);
-      } else {
-        await signInWithPopup(auth, googleProvider);
       }
+
+      // Web flow (or fallback for native)
+      console.log("App: Using web-based Google login flow");
+      await signInWithPopup(auth, googleProvider);
     } catch (err: any) {
       console.error("Google Login Error:", err);
       setError(err.message);
