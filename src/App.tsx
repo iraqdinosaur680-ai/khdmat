@@ -19,8 +19,9 @@ import {
   signInWithEmailAndPassword,
   RecaptchaVerifier,
   linkWithPhoneNumber,
-  linkWithCredential,
   PhoneAuthProvider,
+  GoogleAuthProvider,
+  signInWithCredential,
   signInWithPhoneNumber,
   ConfirmationResult
 } from 'firebase/auth';
@@ -279,57 +280,22 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
     setError('');
     setLoading(true);
     try {
-      const formattedPhone = formatPhoneNumber(phone);
-
-      if (Capacitor.isNativePlatform()) {
-        try {
-          console.log("App: Starting native phone auth for", formattedPhone);
-          const result = await FirebaseAuthentication.signInWithPhoneNumber({
-            phoneNumber: formattedPhone,
-          }) as any;
-          
-          console.log("App: Native phone auth result:", result);
-
-          if (result && result.verificationId) {
-            const verificationId = result.verificationId;
-            setConfirmationResult({
-              confirm: async (code: string) => {
-                const credential = PhoneAuthProvider.credential(verificationId, code);
-                if (auth.currentUser) {
-                  return await linkWithCredential(auth.currentUser, credential);
-                }
-                throw new Error("No user logged in");
-              }
-            } as any);
-            setLoading(false);
-            return; // Success with native flow
-          } else {
-            console.warn("App: Native auth returned no verificationId, falling back to web flow");
-          }
-        } catch (nativeErr: any) {
-          console.error("App: Native phone auth failed, trying web fallback:", nativeErr);
-          // Don't throw yet, try web fallback
-        }
-      }
-
-      // Web flow (or fallback for native)
-      console.log("App: Using web-based phone auth flow");
       if (!recaptchaVerifier.current && recaptchaRef.current) {
         recaptchaVerifier.current = new RecaptchaVerifier(auth, recaptchaRef.current, {
           size: 'invisible',
         });
       }
       
+      const formattedPhone = formatPhoneNumber(phone);
+      // Use linkWithPhoneNumber to attach the phone number to the current account
       const result = await linkWithPhoneNumber(auth.currentUser, formattedPhone, recaptchaVerifier.current!);
       setConfirmationResult(result);
     } catch (err: any) {
       console.error("Phone Auth Error:", err);
       if (err.code === 'auth/credential-already-in-use') {
         setError("This phone number is already linked to another account.");
-      } else if (err.code === 'auth/captcha-check-failed' || err.message?.includes('captcha-check-failed')) {
-        setError(`Domain not authorized (${window.location.hostname}). Please add this domain to 'Authorized domains' at: https://console.firebase.google.com/project/gen-lang-client-0591138893/authentication/settings`);
       } else {
-        setError(err.message || "Failed to send OTP. Please try again.");
+        setError(err.message);
       }
     } finally {
       setLoading(false);
@@ -432,7 +398,7 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
           disabled={loading}
           className="w-full py-4 bg-primary text-white rounded-2xl font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
         >
-          {loading ? t('loading') : (confirmationResult ? t('verify') : t('sendOtp'))}
+          {loading ? t('loading') : (confirmationResult ? t('verify') : t('sendCode'))}
         </button>
       </motion.div>
     </div>
