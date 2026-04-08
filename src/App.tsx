@@ -286,9 +286,17 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
 
       if (Capacitor.isNativePlatform()) {
         // Use Native Capacitor Firebase Auth for better mobile compatibility
+        console.log("App: Starting native phone auth for", formattedPhone);
         const result = await FirebaseAuthentication.signInWithPhoneNumber({
           phoneNumber: formattedPhone,
         }) as any;
+        
+        console.log("App: Native phone auth result:", result);
+
+        if (!result || !result.verificationId) {
+          throw new Error("Failed to get verification ID from native auth plugin.");
+        }
+
         const verificationId = result.verificationId;
         
         // Create a mock ConfirmationResult to maintain compatibility with the existing UI logic
@@ -597,8 +605,19 @@ const AuthPage = () => {
     setLoading(true);
     try {
       if (Capacitor.isNativePlatform()) {
+        console.log("App: Starting native Google login");
         const result = await FirebaseAuthentication.signInWithGoogle() as any;
+        console.log("App: Native Google login result:", result);
+        
+        if (!result) {
+          throw new Error("Failed to get result from native Google login.");
+        }
+
         const idToken = result.authentication?.idToken || result.idToken;
+        if (!idToken) {
+          throw new Error("Failed to get ID token from native Google login.");
+        }
+
         const credential = GoogleAuthProvider.credential(idToken);
         await signInWithCredential(auth, credential);
       } else {
