@@ -326,10 +326,8 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
       console.error("Phone Auth Error:", err);
       if (err.code === 'auth/credential-already-in-use') {
         setError("This phone number is already linked to another account.");
-      } else if (err.code === 'auth/too-many-requests' || err.message?.includes('too-many-requests')) {
-        setError(t('tooManyRequests'));
       } else if (err.code === 'auth/captcha-check-failed' || err.message?.includes('captcha-check-failed')) {
-        setError(`Domain not authorized (${window.location.hostname}). Please add this domain to 'Authorized domains' in Firebase Console > Authentication > Settings.`);
+        setError(`Domain not authorized (${window.location.hostname}). Please add this domain to 'Authorized domains' at: https://console.firebase.google.com/project/gen-lang-client-0591138893/authentication/settings`);
       } else {
         setError(err.message || "Failed to send OTP. Please try again.");
       }
