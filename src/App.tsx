@@ -329,6 +329,8 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
       console.error("Phone Auth Error:", err);
       if (err.code === 'auth/credential-already-in-use') {
         setError("This phone number is already linked to another account.");
+      } else if (err.code === 'auth/too-many-requests' || err.message?.includes('too-many-requests')) {
+        setError(t('tooManyRequests'));
       } else {
         setError(err.message || "Failed to send OTP. Please try again.");
       }
@@ -636,7 +638,11 @@ const AuthPage = () => {
       await signInWithPopup(auth, googleProvider);
     } catch (err: any) {
       console.error("Google Login Error:", err);
-      setError(err.message);
+      if (err.code === 'auth/too-many-requests' || err.message?.includes('too-many-requests')) {
+        setError(t('tooManyRequests'));
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }
