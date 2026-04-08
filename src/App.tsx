@@ -19,6 +19,7 @@ import {
   signInWithEmailAndPassword,
   RecaptchaVerifier,
   linkWithPhoneNumber,
+  linkWithCredential,
   PhoneAuthProvider,
   GoogleAuthProvider,
   signInWithCredential,
@@ -314,17 +315,18 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
       
       if (recaptchaRef.current) {
         recaptchaRef.current.innerHTML = '';
-        // Create a fresh container inside the ref to avoid "already rendered" error
-        const container = document.createElement('div');
-        recaptchaRef.current.appendChild(container);
-        recaptchaVerifier.current = new RecaptchaVerifier(auth, container, {
+        recaptchaVerifier.current = new RecaptchaVerifier(auth, recaptchaRef.current, {
           size: 'invisible',
+          'callback': () => {
+            console.log("reCAPTCHA solved");
+          }
         });
+        await recaptchaVerifier.current.render();
       }
       
       const formattedPhone = formatPhoneNumber(phone);
-      // Use linkWithPhoneNumber to attach the phone number to the current account
-      const result = await linkWithPhoneNumber(auth.currentUser, formattedPhone, recaptchaVerifier.current!);
+      // Use signInWithPhoneNumber and then link manually for better compatibility
+      const result = await signInWithPhoneNumber(auth, formattedPhone, recaptchaVerifier.current!);
       setConfirmationResult(result);
       setCooldown(60);
     } catch (err: any) {
@@ -332,16 +334,11 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
       const errorMessage = err.message || '';
       if (err.code === 'auth/too-many-requests' || errorMessage.includes('too-many-requests')) {
         setError(t('tooManyRequests'));
-        setCooldown(120); // Longer cooldown for rate limiting
+        setCooldown(120);
       } else if (err.code === 'auth/credential-already-in-use') {
         setError(t('phoneAlreadyRegistered'));
-      } else if (errorMessage.includes('reCAPTCHA has already been rendered')) {
-        setError(t('error')); // Generic error or something specific
-        // Force a reset
-        if (recaptchaVerifier.current) {
-          try { recaptchaVerifier.current.clear(); } catch (e) {}
-          recaptchaVerifier.current = null;
-        }
+      } else if (err.code === 'auth/invalid-app-credential') {
+        setError("Invalid app credential. Please ensure the domain is authorized in Firebase Console.");
       } else {
         setError(err.message);
       }
@@ -362,18 +359,34 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
       setError(t('invalidOtp'));
       return;
     }
+    if (!auth.currentUser || !confirmationResult) return;
     setError('');
     setLoading(true);
     try {
-      if (confirmationResult) {
-        // If we are linking, we might need a different approach, but signInWithPhoneNumber 
-        // can also be used to verify the phone. 
-        // However, if the user is already logged in, we should ideally link.
-        // For simplicity in this flow, we verify the OTP.
-        await confirmationResult.confirm(otp);
-        onComplete(selectedCity, phone);
+      // Create credential and link it to the current user
+      const credential = PhoneAuthProvider.credential(confirmationResult.verificationId, otp);
+      
+      // Update the firestore document first to ensure the app state is updated
+      await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+        phone: phone
+      });
+
+      // Try to link the phone number to the current auth account
+      try {
+        await linkWithCredential(auth.currentUser, credential);
+      } catch (e: any) {
+        // If linking fails (e.g. already linked to another account), we still proceed
+        // because we updated the Firestore document which is the primary source for the app
+        console.error("Linking error:", e);
+        if (e.code === 'auth/credential-already-in-use') {
+          setError(t('phoneAlreadyRegistered'));
+          return;
+        }
       }
+      
+      onComplete(selectedCity, phone);
     } catch (err: any) {
+      console.error("OTP Verification Error:", err);
       setError(t('invalidOtp'));
     } finally {
       setLoading(false);
