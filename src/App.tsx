@@ -329,7 +329,7 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
       } else if (err.code === 'auth/too-many-requests' || err.message?.includes('too-many-requests')) {
         setError(t('tooManyRequests'));
       } else if (err.code === 'auth/captcha-check-failed' || err.message?.includes('captcha-check-failed')) {
-        setError("Domain not authorized. Please add this URL to 'Authorized domains' in Firebase Console > Authentication > Settings.");
+        setError(`Domain not authorized (${window.location.hostname}). Please add this domain to 'Authorized domains' in Firebase Console > Authentication > Settings.`);
       } else {
         setError(err.message || "Failed to send OTP. Please try again.");
       }
