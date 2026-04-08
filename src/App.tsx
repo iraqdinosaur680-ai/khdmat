@@ -257,21 +257,69 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
   const { t } = useTranslation();
   const [selectedCity, setSelectedCity] = useState<City>('Baghdad');
   const [phone, setPhone] = useState('');
+  const [otp, setOtp] = useState('');
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const recaptchaRef = useRef<HTMLDivElement>(null);
+  const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
 
-  const handleSubmit = async () => {
+  const formatPhoneNumber = (p: string) => {
+    let cleaned = p.replace(/\D/g, '');
+    if (cleaned.startsWith('0')) cleaned = cleaned.substring(1);
+    if (cleaned.startsWith('964')) cleaned = cleaned.substring(3);
+    return `+964${cleaned}`;
+  };
+
+  const handleSendOtp = async () => {
     if (!phone || phone.length < 10) {
       setError(t('enterPhone'));
+      return;
+    }
+    if (!auth.currentUser) return;
+    setError('');
+    setLoading(true);
+    try {
+      if (!recaptchaVerifier.current && recaptchaRef.current) {
+        recaptchaVerifier.current = new RecaptchaVerifier(auth, recaptchaRef.current, {
+          size: 'invisible',
+        });
+      }
+      
+      const formattedPhone = formatPhoneNumber(phone);
+      // Use linkWithPhoneNumber to attach the phone number to the current account
+      const result = await linkWithPhoneNumber(auth.currentUser, formattedPhone, recaptchaVerifier.current!);
+      setConfirmationResult(result);
+    } catch (err: any) {
+      console.error("Phone Auth Error:", err);
+      if (err.code === 'auth/credential-already-in-use') {
+        setError("This phone number is already linked to another account.");
+      } else {
+        setError(err.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otp || otp.length < 6) {
+      setError(t('invalidOtp'));
       return;
     }
     setError('');
     setLoading(true);
     try {
-      onComplete(selectedCity, phone);
+      if (confirmationResult) {
+        // If we are linking, we might need a different approach, but signInWithPhoneNumber 
+        // can also be used to verify the phone. 
+        // However, if the user is already logged in, we should ideally link.
+        // For simplicity in this flow, we verify the OTP.
+        await confirmationResult.confirm(otp);
+        onComplete(selectedCity, phone);
+      }
     } catch (err: any) {
-      console.error("Profile Setup Error:", err);
-      setError(err.message);
+      setError(t('invalidOtp'));
     } finally {
       setLoading(false);
     }
@@ -293,40 +341,64 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
         {error && <p className="text-red-500 text-xs mb-4">{error}</p>}
 
         <div className="space-y-4 mb-6 text-left">
-          <div>
-            <label className="block text-xs font-bold mb-1 text-gray-500">{t('city')}</label>
-            <select
-              value={selectedCity}
-              onChange={(e) => setSelectedCity(e.target.value as City)}
-              className="w-full p-3 border rounded-xl dark:bg-gray-700 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary"
-            >
-              {IRAQI_CITIES.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
+          {!confirmationResult ? (
+            <>
+              <div>
+                <label className="block text-xs font-bold mb-1 text-gray-500">{t('city')}</label>
+                <select
+                  value={selectedCity}
+                  onChange={(e) => setSelectedCity(e.target.value as City)}
+                  className="w-full p-3 border rounded-xl dark:bg-gray-700 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {IRAQI_CITIES.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
 
-          <div>
-            <label className="block text-xs font-bold mb-1 text-gray-500">{t('phone')}</label>
-            <div className="relative">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <div>
+                <label className="block text-xs font-bold mb-1 text-gray-500">{t('phone')}</label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="07XXXXXXXX"
+                    className="w-full pl-10 pr-4 py-3 border rounded-xl dark:bg-gray-700 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <div>
+              <label className="block text-xs font-bold mb-1 text-gray-500">{t('enterOtp')}</label>
               <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="07XXXXXXXX"
-                className="w-full pl-10 pr-4 py-3 border rounded-xl dark:bg-gray-700 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary"
+                type="text"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                placeholder="XXXXXX"
+                className="w-full p-3 border rounded-xl dark:bg-gray-700 dark:border-gray-600 outline-none focus:ring-2 focus:ring-primary text-center tracking-[1em] font-bold"
+                maxLength={6}
               />
+              <button 
+                onClick={() => setConfirmationResult(null)}
+                className="text-xs text-primary mt-2 hover:underline"
+              >
+                {t('changeCity')} / {t('phone')}
+              </button>
             </div>
-          </div>
+          )}
         </div>
 
+        <div ref={recaptchaRef}></div>
+
         <button
-          onClick={handleSubmit}
+          onClick={confirmationResult ? handleVerifyOtp : handleSendOtp}
           disabled={loading}
           className="w-full py-4 bg-primary text-white rounded-2xl font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
         >
-          {loading ? t('loading') : t('complete')}
+          {loading ? t('loading') : (confirmationResult ? t('verify') : t('sendOtp'))}
         </button>
       </motion.div>
     </div>
