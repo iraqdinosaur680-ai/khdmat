@@ -153,18 +153,19 @@ service cloud.firestore {
     }
 
     function isValidBooking(data) {
-      return data.keys().hasAll(['id', 'customerId', 'customerName', 'workerId', 'workerName', 'status', 'timestamp', 'category', 'city', 'description', 'location']) &&
-             (resource != null || data.keys().hasAll(['locationDescription'])) &&
+      return data.keys().hasAll(['id', 'customerId', 'customerName', 'workerId', 'workerName', 'status', 'timestamp', 'category', 'city', 'description', 'location', 'customerPhone', 'workerPhone']) &&
              data.status in ['pending', 'confirmed', 'completed', 'cancelled', 'denied'] &&
              data.timestamp is number &&
              data.customerName is string && data.customerName.size() > 0 &&
              data.workerName is string && data.workerName.size() > 0 &&
+             data.customerPhone is string &&
+             data.workerPhone is string &&
              data.city is string &&
              data.description is string && data.description.size() > 0 && data.description.size() < 1000 &&
              data.location is string && data.location.size() >= 0 && data.location.size() < 500 &&
-             (!('locationDescription' in data) || (data.locationDescription is string && data.locationDescription.size() > 0 && data.locationDescription.size() < 500)) &&
-             (!('customerEmail' in data) || isValidEmail(data.customerEmail)) &&
-             (!('workerEmail' in data) || isValidEmail(data.workerEmail)) &&
+             (!('locationDescription' in data) || (data.locationDescription is string && data.locationDescription.size() < 500)) &&
+             (!('customerEmail' in data) || data.customerEmail == '' || isValidEmail(data.customerEmail)) &&
+             (!('workerEmail' in data) || data.workerEmail == '' || isValidEmail(data.workerEmail)) &&
              (!('lastMessage' in data) || (data.lastMessage is string && data.lastMessage.size() < 1000)) &&
              (!('lastMessageSenderId' in data) || data.lastMessageSenderId is string) &&
              (!('lastMessageTimestamp' in data) || data.lastMessageTimestamp is number) &&
@@ -181,8 +182,8 @@ service cloud.firestore {
              data.senderId == request.auth.uid &&
              data.text is string && data.text.size() > 0 && data.text.size() < 1000 &&
              data.timestamp is number &&
-             (!('customerEmail' in data) || isValidEmail(data.customerEmail)) &&
-             (!('workerEmail' in data) || isValidEmail(data.workerEmail)) &&
+             (!('customerEmail' in data) || data.customerEmail == '' || isValidEmail(data.customerEmail)) &&
+             (!('workerEmail' in data) || data.workerEmail == '' || isValidEmail(data.workerEmail)) &&
              (!('read' in data) || data.read is bool);
     }
 

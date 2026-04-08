@@ -9,7 +9,7 @@ import {
   Search, Filter, Star, Phone, Calendar, CheckCircle,
   AlertCircle, Info, Mail, Lock, UserPlus, LogIn,
   MapPin, Clock, Truck, ShieldCheck, Pin, Flag,
-  Plus, Trash2, Edit3, MessageCircle, FileText, Camera, Grid, Image
+  Plus, Trash2, Edit3, MessageCircle, FileText, Camera, Grid, Image as ImageIcon
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './AuthContext';
 import { auth, db } from './firebase';
@@ -1221,7 +1221,13 @@ const HomePage = () => {
                     </span>
                   </div>
                 </div>
-                <p className="text-xs font-bold line-clamp-1 mb-2">{req.description}</p>
+                <p className="text-xs font-bold line-clamp-1 mb-1">{req.description}</p>
+                {req.locationDescription && (
+                  <p className="text-[10px] text-gray-500 font-medium line-clamp-1 mb-2 flex items-center gap-1">
+                    <Info size={10} className="flex-shrink-0" />
+                    <span>{req.locationDescription}</span>
+                  </p>
+                )}
                 <div className="mb-3">
                   <input 
                     type="text"
@@ -2261,6 +2267,12 @@ const ProfilePage = () => {
                         </a>
                       ) : booking.location}
                     </p>
+                    {booking.locationDescription && (
+                      <p className="text-xs text-gray-600 dark:text-gray-400 font-medium flex items-start gap-1">
+                        <Info size={12} className="mt-0.5 flex-shrink-0" />
+                        <span>{booking.locationDescription}</span>
+                      </p>
+                    )}
                     {booking.scheduledTime && (
                       <p className="text-xs text-primary font-bold flex items-center gap-1">
                         {booking.status === 'confirmed' && <Pin size={12} className="fill-primary" />}
@@ -2588,6 +2600,19 @@ const ChatPage = () => {
   const { bookingId } = useParams();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
+  const [booking, setBooking] = useState<Booking | null>(null);
+
+  useEffect(() => {
+    if (!bookingId) return;
+    const unsubscribe = onSnapshot(doc(db, 'bookings', bookingId), (docSnap) => {
+      if (docSnap.exists()) {
+        setBooking(docSnap.data() as Booking);
+      }
+    }, (error) => {
+      console.error("App: ChatPage booking snapshot error", error);
+    });
+    return () => unsubscribe();
+  }, [bookingId]);
 
   useEffect(() => {
     if (!bookingId) return;
@@ -2655,9 +2680,33 @@ const ChatPage = () => {
 
   return (
     <div className="h-[calc(100vh-130px)] flex flex-col bg-gray-50 dark:bg-gray-900">
-      <div className="bg-white dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3">
-        <Link to="/profile" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"><ChevronLeft /></Link>
-        <h2 className="font-bold">{t('chat')}</h2>
+      <div className="bg-white dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <Link to="/profile" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"><ChevronLeft /></Link>
+          <div className="flex-1">
+            <h2 className="font-bold">{t('chat')}</h2>
+            {booking && (
+              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">
+                {t(booking.category)} • {booking.customerName}
+              </p>
+            )}
+          </div>
+        </div>
+        {booking && (
+          <div className="px-10 py-2 bg-primary/5 rounded-xl border border-primary/10">
+            <p className="text-[11px] font-bold text-gray-700 dark:text-gray-300 line-clamp-1">{booking.description}</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+              <p className="text-[10px] text-gray-500 flex items-center gap-1">
+                <MapPin size={10} /> {booking.location}
+              </p>
+              {booking.locationDescription && (
+                <p className="text-[10px] text-primary font-bold flex items-center gap-1">
+                  <Info size={10} /> {booking.locationDescription}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -2878,8 +2927,8 @@ const AdminDashboard = () => {
           canvas.width = width;
           canvas.height = height;
           ctx?.drawImage(img, 0, 0, width, height);
-          const pngData = canvas.toDataURL('image/png');
-          setPhotoURL(pngData);
+          const jpegData = canvas.toDataURL('image/jpeg', 0.7);
+          setPhotoURL(jpegData);
         };
         img.src = event.target?.result as string;
       };
@@ -2915,8 +2964,8 @@ const AdminDashboard = () => {
           canvas.width = width;
           canvas.height = height;
           ctx?.drawImage(img, 0, 0, width, height);
-          const pngData = canvas.toDataURL('image/png');
-          setPhotos(prev => [...prev, pngData]);
+          const jpegData = canvas.toDataURL('image/jpeg', 0.6);
+          setPhotos(prev => [...prev, jpegData]);
         };
         img.src = event.target?.result as string;
       };
@@ -2950,8 +2999,8 @@ const AdminDashboard = () => {
           canvas.width = width;
           canvas.height = height;
           ctx?.drawImage(img, 0, 0, width, height);
-          const pngData = canvas.toDataURL('image/png');
-          setAdImageURL(pngData);
+          const jpegData = canvas.toDataURL('image/jpeg', 0.7);
+          setAdImageURL(jpegData);
         };
         img.src = event.target?.result as string;
       };
@@ -3075,6 +3124,11 @@ const AdminDashboard = () => {
 
   const handleSave = async () => {
     try {
+      if (!name || !phone || !city || !profession) {
+        setAlertData({ isOpen: true, title: t('error'), message: t('fillAllFields'), type: 'error' });
+        return;
+      }
+
       const uid = editingWorker?.uid || Math.random().toString(36).substr(2, 9);
       const workerData = {
         uid,
@@ -3098,18 +3152,31 @@ const AdminDashboard = () => {
 
       await setDoc(doc(db, 'workers', uid), workerData);
       
-      // Link to user if they exist
+      // Link to user if they exist by phone or email
+      const { getDocs } = await import('firebase/firestore');
+      let userDocId = null;
+
       if (email) {
-        const { getDocs } = await import('firebase/firestore');
         const usersQuery = query(collection(db, 'users'), where('email', '==', email));
         const userDocs = await getDocs(usersQuery);
         if (!userDocs.empty) {
-          const userDoc = userDocs.docs[0];
-          await setDoc(doc(db, 'users', userDoc.id), {
-            role: 'worker',
-            workerId: uid
-          }, { merge: true });
+          userDocId = userDocs.docs[0].id;
         }
+      }
+
+      if (!userDocId && phone) {
+        const usersQuery = query(collection(db, 'users'), where('phone', '==', phone));
+        const userDocs = await getDocs(usersQuery);
+        if (!userDocs.empty) {
+          userDocId = userDocs.docs[0].id;
+        }
+      }
+
+      if (userDocId) {
+        await setDoc(doc(db, 'users', userDocId), {
+          role: 'worker',
+          workerId: uid
+        }, { merge: true });
       }
       
       resetForm();
@@ -3417,7 +3484,7 @@ const AdminDashboard = () => {
             activeTab === 'ads' ? "bg-white dark:bg-gray-800 shadow-sm text-primary" : "text-gray-500"
           )}
         >
-          <Image size={16} /> {t('ads')}
+          <ImageIcon size={16} /> {t('ads')}
         </button>
         <button 
           onClick={() => setActiveTab('categories')}
@@ -3443,7 +3510,7 @@ const AdminDashboard = () => {
                 <h3 className="text-xl font-bold mb-4">{editingWorker ? t('editWorker') : t('addWorker')}</h3>
                 <div className="grid gap-4">
                   <input value={name} onChange={e => setName(e.target.value)} placeholder={t('name')} className="p-2 border rounded-lg dark:bg-gray-700" />
-                  <input value={email} onChange={e => setEmail(e.target.value)} placeholder={t('email')} className="p-2 border rounded-lg dark:bg-gray-700" type="email" />
+                  <input value={phone} onChange={e => setPhone(e.target.value)} placeholder={t('phone')} className="p-2 border rounded-lg dark:bg-gray-700" />
                   <select value={city} onChange={e => setCity(e.target.value as City)} className="p-2 border rounded-lg dark:bg-gray-700">
                     {IRAQI_CITIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
@@ -3497,7 +3564,6 @@ const AdminDashboard = () => {
                     </div>
                   </div>
 
-                  <input value={phone} onChange={e => setPhone(e.target.value)} placeholder={t('phone')} className="p-2 border rounded-lg dark:bg-gray-700" />
                   <div className="space-y-2">
                     <label className="text-sm font-bold">{t('photoURL')} (.png)</label>
                     <div className="flex items-center gap-3">
