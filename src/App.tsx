@@ -308,12 +308,36 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
       if (Capacitor.isNativePlatform()) {
         // Use native Firebase Auth to bypass web reCAPTCHA issues on Android/iOS
         await FirebaseAuthentication.removeAllListeners();
+        
         await FirebaseAuthentication.addListener('phoneCodeSent', (event) => {
           setConfirmationResult({ verificationId: event.verificationId } as any);
+          setLoading(false);
+          setCooldown(60);
         });
+
+        await FirebaseAuthentication.addListener('phoneVerificationCompleted', async (event) => {
+          // Instant verification (Android auto-retrieval)
+          try {
+            await updateDoc(doc(db, 'users', auth.currentUser!.uid), {
+              phone: phone
+            });
+            onComplete(selectedCity, phone);
+          } catch (e) {
+            console.error(e);
+          }
+        });
+
+        await FirebaseAuthentication.addListener('phoneVerificationFailed', (event) => {
+          setError(event.message || 'Phone verification failed');
+          setLoading(false);
+        });
+
         await FirebaseAuthentication.signInWithPhoneNumber({
           phoneNumber: formattedPhone,
         });
+        
+        // Don't set loading to false here, wait for the events
+        return;
       } else {
         // Ensure we have a clean state for reCAPTCHA to avoid "already rendered" error
         if (recaptchaVerifier.current) {
