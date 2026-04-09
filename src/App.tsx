@@ -305,71 +305,36 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
     try {
       const formattedPhone = formatPhoneNumber(phone);
       
-      if (Capacitor.isNativePlatform()) {
-        // Use native Firebase Auth to bypass web reCAPTCHA issues on Android/iOS
-        await FirebaseAuthentication.removeAllListeners();
-        
-        await FirebaseAuthentication.addListener('phoneCodeSent', (event) => {
-          setConfirmationResult({ verificationId: event.verificationId } as any);
-          setLoading(false);
-          setCooldown(60);
-        });
-
-        await FirebaseAuthentication.addListener('phoneVerificationCompleted', async (event) => {
-          // Instant verification (Android auto-retrieval)
-          try {
-            await updateDoc(doc(db, 'users', auth.currentUser!.uid), {
-              phone: phone
-            });
-            onComplete(selectedCity, phone);
-          } catch (e) {
-            console.error(e);
-          }
-        });
-
-        await FirebaseAuthentication.addListener('phoneVerificationFailed', (event) => {
-          setError(event.message || 'Phone verification failed');
-          setLoading(false);
-        });
-
-        await FirebaseAuthentication.signInWithPhoneNumber({
-          phoneNumber: formattedPhone,
-        });
-        
-        // Don't set loading to false here, wait for the events
-        return;
-      } else {
-        // Ensure we have a clean state for reCAPTCHA to avoid "already rendered" error
-        if (recaptchaVerifier.current) {
-          try {
-            recaptchaVerifier.current.clear();
-          } catch (e) {
-            // Ignore clear errors
-          }
-          recaptchaVerifier.current = null;
+      // Ensure we have a clean state for reCAPTCHA to avoid "already rendered" error
+      if (recaptchaVerifier.current) {
+        try {
+          recaptchaVerifier.current.clear();
+        } catch (e) {
+          // Ignore clear errors
         }
-        
-        if (recaptchaRef.current) {
-          recaptchaRef.current.innerHTML = '';
-          // Create a fresh container with a unique ID inside the ref
-          const containerId = `recaptcha-container-${Date.now()}`;
-          const container = document.createElement('div');
-          container.id = containerId;
-          recaptchaRef.current.appendChild(container);
-
-          recaptchaVerifier.current = new RecaptchaVerifier(auth, containerId, {
-            size: 'invisible',
-            'callback': () => {
-              console.log("reCAPTCHA solved");
-            }
-          });
-          await recaptchaVerifier.current.render();
-        }
-        
-        // Use signInWithPhoneNumber and then link manually for better compatibility
-        const result = await signInWithPhoneNumber(auth, formattedPhone, recaptchaVerifier.current!);
-        setConfirmationResult(result);
+        recaptchaVerifier.current = null;
       }
+      
+      if (recaptchaRef.current) {
+        recaptchaRef.current.innerHTML = '';
+        // Create a fresh container with a unique ID inside the ref
+        const containerId = `recaptcha-container-${Date.now()}`;
+        const container = document.createElement('div');
+        container.id = containerId;
+        recaptchaRef.current.appendChild(container);
+
+        recaptchaVerifier.current = new RecaptchaVerifier(auth, containerId, {
+          size: 'invisible',
+          'callback': () => {
+            console.log("reCAPTCHA solved");
+          }
+        });
+        await recaptchaVerifier.current.render();
+      }
+      
+      // Use signInWithPhoneNumber and then link manually for better compatibility
+      const result = await signInWithPhoneNumber(auth, formattedPhone, recaptchaVerifier.current!);
+      setConfirmationResult(result);
       setCooldown(60);
     } catch (err: any) {
       console.error("Phone Auth Error:", err);
