@@ -287,9 +287,6 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
   }, []);
 
   const formatPhoneNumber = (p: string) => {
-    if (p.startsWith('+')) {
-      return '+' + p.replace(/\D/g, '');
-    }
     let cleaned = p.replace(/\D/g, '');
     if (cleaned.startsWith('0')) cleaned = cleaned.substring(1);
     if (cleaned.startsWith('964')) cleaned = cleaned.substring(3);
@@ -298,8 +295,7 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
 
   const handleSendOtp = async () => {
     if (cooldown > 0) return;
-    const formattedPhone = formatPhoneNumber(phone);
-    if (!formattedPhone || formattedPhone.length < 10) {
+    if (!phone || phone.length < 10) {
       setError(t('enterPhone'));
       return;
     }
@@ -334,55 +330,11 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
         await recaptchaVerifier.current.render();
       }
       
-      if (Capacitor.isNativePlatform()) {
-        // Use native Capacitor plugin to bypass web reCAPTCHA on mobile
-        
-        // Remove previous listeners to avoid duplicates
-        await FirebaseAuthentication.removeAllListeners();
-        
-        // Listen for the SMS code sent event to get the verificationId
-        await FirebaseAuthentication.addListener('phoneCodeSent', (event) => {
-          setConfirmationResult({ verificationId: event.verificationId } as any);
-          setCooldown(60);
-          setLoading(false);
-        });
-
-        // Listen for auto-verification (Android only)
-        await FirebaseAuthentication.addListener('phoneVerificationCompleted', async (event) => {
-          console.log("Auto verified natively", event);
-          // If auto-verified, the native SDK signed them in.
-          // We can just update the firestore document and complete the profile.
-          try {
-            await updateDoc(doc(db, 'users', auth.currentUser!.uid), {
-              phone: phone
-            });
-            onComplete(selectedCity, phone);
-          } catch (e) {
-            console.error("Error completing profile after auto-verification", e);
-          }
-          setLoading(false);
-        });
-
-        await FirebaseAuthentication.addListener('phoneVerificationFailed', (event) => {
-          console.error("Native phone verification failed", event);
-          setError(event.message || "Phone verification failed. Please try again.");
-          setLoading(false);
-        });
-
-        await FirebaseAuthentication.signInWithPhoneNumber({
-          phoneNumber: formattedPhone,
-        });
-        
-        // Return early so we don't hit the finally block which sets loading to false immediately
-        return;
-      } else {
-        // Use web SDK with reCAPTCHA for browser
-        const result = await signInWithPhoneNumber(auth, formattedPhone, recaptchaVerifier.current!);
-        setConfirmationResult(result);
-        setCooldown(60);
-        setLoading(false);
-      }
-      
+      const formattedPhone = formatPhoneNumber(phone);
+      // Use signInWithPhoneNumber and then link manually for better compatibility
+      const result = await signInWithPhoneNumber(auth, formattedPhone, recaptchaVerifier.current!);
+      setConfirmationResult(result);
+      setCooldown(60);
     } catch (err: any) {
       console.error("Phone Auth Error:", err);
       const errorMessage = err.message || '';
@@ -403,6 +355,7 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
         } catch (e) {}
         recaptchaVerifier.current = null;
       }
+    } finally {
       setLoading(false);
     }
   };
@@ -516,7 +469,7 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
 
         <button
           onClick={confirmationResult ? handleVerifyOtp : handleSendOtp}
-          disabled={loading || (!confirmationResult && cooldown > 0)}
+          disabled={loading || cooldown > 0}
           className="w-full py-4 bg-primary text-white rounded-2xl font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? t('loading') : (confirmationResult ? t('verify') : (cooldown > 0 ? `${t('sendCode')} (${cooldown}s)` : t('sendCode')))}

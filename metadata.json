@@ -1,5 +1,5 @@
 {
-  "name": " خدمات (KHDMAT)",
+  "name": "Remix: Remix: خدمات (KHDMAT)",
   "description": "A service worker finder app for Iraqi cities with multi-language and dark mode support.",
   "requestFramePermissions": [
     "geolocation"
