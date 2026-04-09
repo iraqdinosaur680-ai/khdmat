@@ -15,6 +15,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "420174503383-gf2sbgg08tijkrsl8m7kjojeebjmh7gr.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.khdmat.app",
+            "certificate_hash": "78cd894da3d4c066159ed8a55d0a5ecc90969cb9"
+          }
+        },
+        {
           "client_id": "420174503383-kpc96ir8hn6h4s2p9g49tms30ej75a2j.apps.googleusercontent.com",
           "client_type": 3
         }
