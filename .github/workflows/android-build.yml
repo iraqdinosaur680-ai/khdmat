@@ -53,5 +53,3 @@ jobs:
         with:
           name: Khdmat-App-Debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
-     - name: Get SHA Fingerprints
-       run: cd android && ./gradlew signingReport
