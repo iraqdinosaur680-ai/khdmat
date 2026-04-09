@@ -315,7 +315,13 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
       
       if (recaptchaRef.current) {
         recaptchaRef.current.innerHTML = '';
-        recaptchaVerifier.current = new RecaptchaVerifier(auth, recaptchaRef.current, {
+        // Create a fresh container with a unique ID inside the ref
+        const containerId = `recaptcha-container-${Date.now()}`;
+        const container = document.createElement('div');
+        container.id = containerId;
+        recaptchaRef.current.appendChild(container);
+
+        recaptchaVerifier.current = new RecaptchaVerifier(auth, containerId, {
           size: 'invisible',
           'callback': () => {
             console.log("reCAPTCHA solved");
@@ -463,7 +469,7 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
 
         <button
           onClick={confirmationResult ? handleVerifyOtp : handleSendOtp}
-          disabled={loading || cooldown > 0}
+          disabled={loading || (!confirmationResult && cooldown > 0)}
           className="w-full py-4 bg-primary text-white rounded-2xl font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? t('loading') : (confirmationResult ? t('verify') : (cooldown > 0 ? `${t('sendCode')} (${cooldown}s)` : t('sendCode')))}
