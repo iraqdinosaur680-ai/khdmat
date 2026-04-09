@@ -1,28 +1,21 @@
 {
   "project_info": {
     "project_number": "420174503383",
+    "firebase_url": "https://gen-lang-client-0591138893-default-rtdb.firebaseio.com",
     "project_id": "gen-lang-client-0591138893",
     "storage_bucket": "gen-lang-client-0591138893.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:420174503383:android:b415ab7998247a28dfbf92",
+        "mobilesdk_app_id": "1:420174503383:android:04f669be88d34effdfbf92",
         "android_client_info": {
           "package_name": "com.khdmat.app"
         }
       },
       "oauth_client": [
         {
-          "client_id": "420174503383-j1mv9qdv8rp4sjl394gov2ml2d7i3gpf.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.khdmat.app",
-            "certificate_hash": "5e8f16062ea3cd2c4a0d5474e73a5458f5467efb"
-          }
-        },
-        {
-          "client_id": "420174503383-ng18hjfhv6d0clq7c86g0v0s9iq7isad.apps.googleusercontent.com",
+          "client_id": "420174503383-kpc96ir8hn6h4s2p9g49tms30ej75a2j.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
@@ -35,7 +28,7 @@
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "420174503383-ng18hjfhv6d0clq7c86g0v0s9iq7isad.apps.googleusercontent.com",
+              "client_id": "420174503383-kpc96ir8hn6h4s2p9g49tms30ej75a2j.apps.googleusercontent.com",
               "client_type": 3
             }
           ]
