@@ -1,0 +1,56 @@
+{
+  "project_info": {
+    "project_number": "420174503383",
+    "firebase_url": "https://gen-lang-client-0591138893-default-rtdb.firebaseio.com",
+    "project_id": "gen-lang-client-0591138893",
+    "storage_bucket": "gen-lang-client-0591138893.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:420174503383:android:b415ab7998247a28dfbf92",
+        "android_client_info": {
+          "package_name": "com.khdmat.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "420174503383-89f5iqtnb2lbn6eed68th5f1hvv5ju5e.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.khdmat.app",
+            "certificate_hash": "c498ecc3657f9b48ad0dd7f34714375de8f0de3b"
+          }
+        },
+        {
+          "client_id": "420174503383-j1mv9qdv8rp4sjl394gov2ml2d7i3gpf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.khdmat.app",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d5474e73a5458f5467efb"
+          }
+        },
+        {
+          "client_id": "420174503383-kpc96ir8hn6h4s2p9g49tms30ej75a2j.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCG17F_fwtydy6siuw2jZvdtba5oZXU3v4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "420174503383-kpc96ir8hn6h4s2p9g49tms30ej75a2j.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
