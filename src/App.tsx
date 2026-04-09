@@ -341,25 +341,46 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
         // Listen for the SMS code sent event to get the verificationId
         await FirebaseAuthentication.addListener('phoneCodeSent', (event) => {
           setConfirmationResult({ verificationId: event.verificationId } as any);
+          setCooldown(60);
+          setLoading(false);
         });
 
         // Listen for auto-verification (Android only)
-        await FirebaseAuthentication.addListener('phoneVerificationCompleted', (event) => {
-          // If auto-verified, we might not need the OTP step, but for simplicity we can just fill it
-          // or handle it if needed. For now, we just rely on the manual OTP entry.
+        await FirebaseAuthentication.addListener('phoneVerificationCompleted', async (event) => {
           console.log("Auto verified natively", event);
+          // If auto-verified, the native SDK signed them in.
+          // We can just update the firestore document and complete the profile.
+          try {
+            await updateDoc(doc(db, 'users', auth.currentUser!.uid), {
+              phone: phone
+            });
+            onComplete(selectedCity, phone);
+          } catch (e) {
+            console.error("Error completing profile after auto-verification", e);
+          }
+          setLoading(false);
+        });
+
+        await FirebaseAuthentication.addListener('phoneVerificationFailed', (event) => {
+          console.error("Native phone verification failed", event);
+          setError(event.message || "Phone verification failed. Please try again.");
+          setLoading(false);
         });
 
         await FirebaseAuthentication.signInWithPhoneNumber({
           phoneNumber: formattedPhone,
         });
+        
+        // Return early so we don't hit the finally block which sets loading to false immediately
+        return;
       } else {
         // Use web SDK with reCAPTCHA for browser
         const result = await signInWithPhoneNumber(auth, formattedPhone, recaptchaVerifier.current!);
         setConfirmationResult(result);
+        setCooldown(60);
+        setLoading(false);
       }
       
-      setCooldown(60);
     } catch (err: any) {
       console.error("Phone Auth Error:", err);
       const errorMessage = err.message || '';
@@ -380,7 +401,6 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
         } catch (e) {}
         recaptchaVerifier.current = null;
       }
-    } finally {
       setLoading(false);
     }
   };
