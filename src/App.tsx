@@ -331,9 +331,19 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
       }
       
       const formattedPhone = formatPhoneNumber(phone);
-      // Use signInWithPhoneNumber and then link manually for better compatibility
-      const result = await signInWithPhoneNumber(auth, formattedPhone, recaptchaVerifier.current!);
-      setConfirmationResult(result);
+      
+      if (Capacitor.isNativePlatform()) {
+        // Use native Capacitor plugin to bypass web reCAPTCHA on mobile
+        const { verificationId } = await FirebaseAuthentication.signInWithPhoneNumber({
+          phoneNumber: formattedPhone,
+        });
+        setConfirmationResult({ verificationId } as any);
+      } else {
+        // Use web SDK with reCAPTCHA for browser
+        const result = await signInWithPhoneNumber(auth, formattedPhone, recaptchaVerifier.current!);
+        setConfirmationResult(result);
+      }
+      
       setCooldown(60);
     } catch (err: any) {
       console.error("Phone Auth Error:", err);
