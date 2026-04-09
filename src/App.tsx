@@ -287,6 +287,9 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
   }, []);
 
   const formatPhoneNumber = (p: string) => {
+    if (p.startsWith('+')) {
+      return '+' + p.replace(/\D/g, '');
+    }
     let cleaned = p.replace(/\D/g, '');
     if (cleaned.startsWith('0')) cleaned = cleaned.substring(1);
     if (cleaned.startsWith('964')) cleaned = cleaned.substring(3);
@@ -295,7 +298,8 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
 
   const handleSendOtp = async () => {
     if (cooldown > 0) return;
-    if (!phone || phone.length < 10) {
+    const formattedPhone = formatPhoneNumber(phone);
+    if (!formattedPhone || formattedPhone.length < 10) {
       setError(t('enterPhone'));
       return;
     }
@@ -329,8 +333,6 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
         });
         await recaptchaVerifier.current.render();
       }
-      
-      const formattedPhone = formatPhoneNumber(phone);
       
       if (Capacitor.isNativePlatform()) {
         // Use native Capacitor plugin to bypass web reCAPTCHA on mobile
