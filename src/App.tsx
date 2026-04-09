@@ -334,10 +334,25 @@ const ProfileSetupPopup = ({ onComplete }: { onComplete: (city: City, phone: str
       
       if (Capacitor.isNativePlatform()) {
         // Use native Capacitor plugin to bypass web reCAPTCHA on mobile
-        const { verificationId } = await FirebaseAuthentication.signInWithPhoneNumber({
+        
+        // Remove previous listeners to avoid duplicates
+        await FirebaseAuthentication.removeAllListeners();
+        
+        // Listen for the SMS code sent event to get the verificationId
+        await FirebaseAuthentication.addListener('phoneCodeSent', (event) => {
+          setConfirmationResult({ verificationId: event.verificationId } as any);
+        });
+
+        // Listen for auto-verification (Android only)
+        await FirebaseAuthentication.addListener('phoneVerificationCompleted', (event) => {
+          // If auto-verified, we might not need the OTP step, but for simplicity we can just fill it
+          // or handle it if needed. For now, we just rely on the manual OTP entry.
+          console.log("Auto verified natively", event);
+        });
+
+        await FirebaseAuthentication.signInWithPhoneNumber({
           phoneNumber: formattedPhone,
         });
-        setConfirmationResult({ verificationId } as any);
       } else {
         // Use web SDK with reCAPTCHA for browser
         const result = await signInWithPhoneNumber(auth, formattedPhone, recaptchaVerifier.current!);
