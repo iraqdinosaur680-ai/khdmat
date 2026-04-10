@@ -4,6 +4,10 @@ const config: any = {
   appId: 'com.khdmat.app',
   appName: 'Khdmat',
   webDir: 'dist',
+  server: {
+    hostname: 'gen-lang-client-0591138893.firebaseapp.com',
+    androidScheme: 'https'
+  },
   plugins: {
     FirebaseAuthentication: {
       skipNativeAuth: false,
